@@ -26,6 +26,13 @@ data Ty =
     | FunTy Ty Ty
     deriving (Show,Eq)
 
+data STy = 
+      STyVar Name
+    | STyNat 
+    | STyFun STy STy
+    deriving (Show,Eq)
+ 
+
 type Name = String
 
 data Const = CNat Int
@@ -36,7 +43,10 @@ data UnaryOp = Succ | Pred
 
 -- | tipo de datos de declaraciones, parametrizado por el tipo del cuerpo de la declaración
 data Decl a =
-    Decl { declPos :: Pos, declName :: Name, declBody :: a }
+  Decl { declPos :: Pos, declName :: Name, declType :: STy, declBody :: a } --Modificamos poniendo el tipo por que ya no se aceptan declaraciones sin tipo
+  | DeclLetf { declPos :: Pos, declName :: Name, declArgs :: [([Name], STy)] ,declType :: STy, declBody :: a }
+  | DeclLetRec { declPos :: Pos, declName :: Name, declArgs :: [([Name], STy)] ,declType :: STy, declBody :: a }
+  | DeclType { declPos :: Pos, declName :: Name, declType :: STy }
   | Eval a
   deriving (Show,Functor)
 
@@ -54,8 +64,25 @@ data Tm info var =
   | IfZ info (Tm info var) (Tm info var) (Tm info var)
   deriving (Show, Functor)
 
+-- AST de términos azucarados
+data STm info var = 
+    SV info var
+  | SConst info Const
+  | SLam info Name STy (STm info var)
+  | SApp info (STm info var) (STm info var)
+  | SUnaryOp info UnaryOp (STm info var)
+  | SFix info Name STy Name STy (STm info var)
+  | SIfZ info (STm info var) (STm info var) (STm info var)
+  | SLet info Name STy (STm info var) (STm info var)
+  | SLetf info [([Name], STy)] STy (STm info var) (STm info var)
+  | SFun info [([Name], STy)] (STm info var)
+  | SLetRec info [([Name], STy)] STy (STm info var) (STm info var)
+  | SUnaryOpFree info UnaryOp
+
 type NTerm = Tm Pos Name   -- ^ 'Tm' tiene 'Name's como variables ligadas y libres, guarda posición
 type Term = Tm Pos Var     -- ^ 'Tm' con índices de De Bruijn como variables ligadas, different type of variables, guarda posición
+
+type NSTerm = STm Pos Name -- Sinónimo de terminos azucarados
 
 data Var = 
     Bound !Int

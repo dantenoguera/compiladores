@@ -29,7 +29,7 @@ lexer = Tok.makeTokenParser $
         emptyDef {
          commentLine    = "#",
          reservedNames = ["let", "fun", "fix", "then", "else", 
-                          "succ", "pred", "ifz", "Nat"],
+                          "succ", "pred", "ifz", "Nat", "rec", "type"],
          reservedOpNames = ["->",":","="]
         }
 
@@ -65,16 +65,19 @@ getPos :: P Pos
 getPos = do pos <- getPosition
             return $ Pos (sourceLine pos) (sourceColumn pos)
 
-tyatom :: P Ty
-tyatom = (reserved "Nat" >> return NatTy)
-         <|> parens typeP
+tyatom :: P STy
+tyatom = (do reserved "Nat"
+             return STyNat) <|>
+         (do v <- var
+             return (STyVar v)) <|>
+         parens typeP
 
-typeP :: P Ty
+typeP :: P STy
 typeP = try (do 
           x <- tyatom
           reservedOp "->"
           y <- typeP
-          return (FunTy x y))
+          return (STyFun x y))
       <|> tyatom
           
 const :: P Const
@@ -127,11 +130,15 @@ ifz = do i <- getPos
          e <- tm
          return (IfZ i c t e)
 
-binding :: P (Name, Ty)
-binding = do v <- var
+binding :: P ([Name], Ty)
+binding = do vars <- many var
              reservedOp ":"
              ty <- typeP
-             return (v, ty)
+             return (vars, ty)
+
+binders :: P [([Name], Ty)]
+binders = many1 binding
+
 
 fix :: P NTerm
 fix = do i <- getPos
@@ -147,14 +154,73 @@ tm :: P NTerm
 tm = app <|> lam <|> ifz <|> unaryOp <|> fix
 
 -- | Parser de declaraciones
-decl :: P (Decl NTerm)
+{-
+decl :: P (Decl NSTerm)
 decl = do 
      i <- getPos
-     reserved "let"
-     v <- var
+     (reserved "let"
+     (v <- var
+     ty <- typeP
      reservedOp "="
      t <- tm
-     return (Decl i v t)
+     return (Decl i v ty t)) <|>
+    (f <- var --usar otra funcion para parsear nombre de funcion sino
+    b <- binders
+    reservedOp ":"
+    ty <- typeP
+    reservedOp "="
+    t <- tm
+    return (DeclLetf i f b ty t)
+    ) <|>
+    ( reserved "rec"
+    f <- var --usar otra funcion para parsear nombre de funcion sino
+    b <- binders
+    reservedOp ":"
+    ty <- typeP
+    reservedOp "="
+    t <- tm
+    return (DeclLetRec i f b ty t))) <|>
+    (reserved "type"
+    n <- var
+    ty <- typeP
+    return (DeclType i n ty))
+-}
+
+decl :: P (Decl NSTerm)
+decl = do
+  i <- getPos
+  (do 
+    reserved "let"
+    (do 
+      v <- var
+      ty <- typeP
+      reservedOp "="
+      t <- tm
+      return (Decl i v ty t)) 
+      <|> (do
+            f <- var --usar otra funcion para parsear nombre de funcion sino
+            b <- binders
+            reservedOp ":"
+            ty <- typeP
+            reservedOp "="
+            t <- tm
+            return (DeclLetf i f b ty t))
+      <|> (do 
+            reserved "rec"
+            f <- var --usar otra funcion para parsear nombre de funcion sino
+            b <- binders
+            reservedOp ":"
+            ty <- typeP
+            reservedOp "="
+            t <- tm
+            return (DeclLetRec i f b ty t)))
+      <|> (do 
+            reserved "type"
+            n <- var
+            ty <- typeP
+            return (DeclType i n ty))
+
+  
 
 -- | Parser de programas (listas de declaraciones) 
 program :: P [Decl NTerm]
