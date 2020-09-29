@@ -82,12 +82,24 @@ parseIO filename p x = case runP p x filename of
                   Left e  -> throwError (ParseErr e)
                   Right r -> return r
 
+{-                  
 handleDecl ::  MonadPCF m => Decl NTerm -> m ()
 handleDecl (Decl p x t) = do
         let tt = elab t
         tcDecl (Decl p x tt)    
         te <- eval tt
         addDecl (Decl p x te)
+-}
+
+handleDecl ::  MonadPCF m => Decl NTerm -> m ()
+handleDecl ndecl = do
+        let decl@(Decl p x ty t) = elab_decl ndecl
+        tcDecl decl
+        te <- eval t
+        addDecl (Decl p x ty te)
+        
+    
+        
 
 data Command = Compile CompileForm
              | Print String
