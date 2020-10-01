@@ -90,17 +90,67 @@ handleDecl (Decl p x t) = do
         te <- eval tt
         addDecl (Decl p x te)
 -}
+---------------------------------------------------------------------------------------------------------------------------------------
+-- Funciones para desucarar
+---------------------------------------------------------------------------------------------------------------------------------------
 
-handleDecl ::  MonadPCF m => Decl NTerm -> m ()
+typeVariableExpand :: ([Name],Ty) -> Ty -> Ty
+typeVariableExpand (n:ns,xty) tx = typeVariableExpand (ns,xty) (FunTy xty tx)--no hago desugar type por que lo hago en el tipo resultante
+typeVariableExpand ([],xty) tx   = tx
+
+desugarDecl :: Decl NSTerm -> Decl NTerm
+desugarDecl (Decl p n ty t) =  Decl p n ty (desugarTerm t)
+desugarDecl (DeclLetf p n args ty t) = (Decl p n (foldr typeVariableExpand ty args) (desugarTerm (SFun p args t)))
+desugarDecl (DeclLetRec p n [([x],xty)] ty t) = Decl p n (FunTy xty ty) (desugarTerm (SFix p n (FunTy xty ty) x xty t))
+desugarDecl (DeclLetRec p n (((x1:rest), t1):xs) ty t) | null rest = desugarDecl (DeclLetRec p n [([x1], t1)] (foldr typeVariableExpand ty xs) (SFun p xs t))
+                                                       | otherwise = desugarDecl (DeclLetRec p n [([x1], t1)] (foldr typeVariableExpand ty ((rest, t1):xs)) (SFun p ((rest, t1):xs) t))
+desugarDecl (Eval t) = Eval (desugarTerm t)
+
+desugarTerm :: NSTerm -> NTerm
+desugarTerm (SV p v) = V p v
+desugarTerm (SConst p c) = Const p c
+desugarTerm (SLam p n ty t) = Lam p n ty (desugarTerm t)
+desugarTerm (SApp p t1 t2) = App p (desugarTerm t1) (desugarTerm t2)
+desugarTerm (SUnaryOp p op t) = UnaryOp p op (desugarTerm t)
+desugarTerm (SFix p f tyf x tyx t) = Fix p f tyf x tyx (desugarTerm t)
+desugarTerm (SIfZ p t1 t2 t3) = IfZ p (desugarTerm t1) (desugarTerm t2) (desugarTerm t3)
+desugarTerm (SLet p n ty t1 t2) = App p (Lam p n ty (desugarTerm t2)) (desugarTerm t1)
+desugarTerm (SLetf p f xs ty t1 t2) = desugarTerm (SLet f (foldr typeVariableExpand ty xs)  (SFun p xs t1) t2)
+desugarTerm (SFun p xs t) = f p xs t
+                            where f p (((n:ns),nty):xs) t = Lam p n nty (f p ((ns, nty):xs)) t
+                                  f p (([],nty):xs) t = f p xs t
+                                  f p [] t = t
+
+desugarTerm (SUnaryOpFree p op) = Lam p "x" Nat (UnaryOp p op) (V p "x")
+desugarTerm (SLetRec p f [([x],xty)] ty t1 t2) = desugarTerm (SLet p f (FunTy xty ty) (SFix p f (FunTy xty ty) x xty t1) t2)
+desugarTerm (SLetRec p f (((x1:rest), ty1):xs) ty t1 t2) | null rest = desugarTerm (SLetRec p f [([x1], ty1)] (foldr typeVariableExpand ty xs) (SFun p xs t1) t2)
+                                                       | otherwise = desugarTerm (SLetRec  p f [([x1], ty1)] (foldr typeVariableExpand ty ((rest, t1):xs)) (SFun p ((rest, ty1):xs) t1) t2)
+{-
+desugarTerm (SFun p xs t) = f p (reverse (map (\(ns,nty) -> (reverse ns, nty)) xs)) t
+                            where f p (((n:ns),nty):xs) t = f p ((ns,nty):xs) (Lam p n nty t)
+                                  f p (([],nty):xs) t = f p xs t
+                                  f p [] t = t
+-}
+Lam p n nty (f p ((ns, nty):xs)) t
+
+Lam info Name Ty (Tm info var)
+
+| SLet info Name Ty (STm info var) (STm info var)
+| SLetf info [([Name], Ty)] Ty (STm info var) (STm info var)
+| SFun info [([Name], Ty)] (STm info var)
+| SLetRec info [([Name], Ty)] Ty (STm info var) (STm info var)
+| SUnaryOpFree info UnaryOp
+
+---------------------------------------------------------------------------------------------------------------------------------------
+
+handleDecl ::  MonadPCF m => Decl NSTerm -> m ()
+handleDecl (DeclType p n ty) = addTy n ty
 handleDecl ndecl = do
-        let decl@(Decl p x ty t) = elab_decl ndecl
+        let decl@(Decl p x ty t) = elab_decl (desugarDecl ndecl)
         tcDecl decl
         te <- eval t
         addDecl (Decl p x ty te)
         
-    
-        
-
 data Command = Compile CompileForm
              | Print String
              | Type String
@@ -179,7 +229,7 @@ compilePhrase x =
     dot <- parseIO "<interactive>" declOrTm x
     case dot of 
       Left d  -> handleDecl d
-      Right t -> handleTerm t
+      Right t -> handleTerm (desugarTerm t)
 
 handleTerm ::  MonadPCF m => NTerm -> m ()
 handleTerm t = do
@@ -193,8 +243,9 @@ printPhrase   :: MonadPCF m => String -> m ()
 printPhrase x =
   do
     x' <- parseIO "<interactive>" tm x
-    let ex = elab x'
-    t  <- case x' of 
+    let  x''= desugarTerm x'
+         ex = elab x''
+    t  <- case x'' of 
            (V p f) -> maybe ex id <$> lookupDecl f
            _       -> return ex  
     printPCF "NTerm:"
@@ -205,7 +256,7 @@ printPhrase x =
 typeCheckPhrase :: MonadPCF m => String -> m ()
 typeCheckPhrase x = do
          t <- parseIO "<interactive>" tm x
-         let tt = elab t
+         let tt = elab (desugarTerm t)
          s <- get
          ty <- tc tt (tyEnv s)
          printPCF (ppTy ty)

@@ -65,43 +65,43 @@ getPos :: P Pos
 getPos = do pos <- getPosition
             return $ Pos (sourceLine pos) (sourceColumn pos)
 
-tyatom :: P STy
+tyatom :: P Ty
 tyatom = (do reserved "Nat"
-             return STyNat) <|>
+             return NatTy) <|>
          (do v <- var
-             return (STyVar v)) <|>
+             return (NameTy v)) <|>
          parens typeP
 
-typeP :: P STy
+typeP :: P Ty
 typeP = try (do 
           x <- tyatom
           reservedOp "->"
           y <- typeP
-          return (STyFun x y))
+          return (FunTy x y))
       <|> tyatom
           
 const :: P Const
 const = CNat <$> num
-
-unaryOp :: P NTerm
+-- (a -> b -> b) -> b -> [a] -> b
+unaryOp :: P NSTerm
 unaryOp = do
   i <- getPos
   foldr (\(w, r) rest -> try (do 
-                                 reserved w
-                                 a <- atom
+                                 reserved w -- succ o pred
+                                 a <- atom -- cte o var
                                  return (r a)) <|> rest) parserZero (mapping i)
   where
    mapping i = [
-       ("succ", UnaryOp i Succ)
-     , ("pred", UnaryOp i Pred)
+       ("succ", SUnaryOp i Succ)
+     , ("pred", SUnaryOp i Pred)
     ]
 
-atom :: P NTerm
-atom =     (flip Const <$> const <*> getPos)
-       <|> flip V <$> var <*> getPos
+atom :: P NSTerm
+atom =     (flip SConst <$> const <*> getPos)
+       <|> flip SV <$> var <*> getPos
        <|> parens tm
 
-lam :: P NTerm
+lam :: P NSTerm
 lam = do i <- getPos
          reserved "fun"
          (v,ty) <- parens $ do 
@@ -111,16 +111,16 @@ lam = do i <- getPos
                     return (v,ty)
          reservedOp "->"
          t <- tm
-         return (Lam i v ty t)
+         return (SLam i v ty t)
 
 -- Nota el parser app también parsea un solo atom.
-app :: P NTerm
+app :: P NSTerm
 app = (do i <- getPos
           f <- atom
           args <- many atom
-          return (foldl (App i) f args))
+          return (foldl (SApp i) f args))---Ver
 
-ifz :: P NTerm
+ifz :: P NSTerm
 ifz = do i <- getPos
          reserved "ifz"
          c <- tm
@@ -128,64 +128,41 @@ ifz = do i <- getPos
          t <- tm
          reserved "else"
          e <- tm
-         return (IfZ i c t e)
+         return (SIfZ i c t e)
 
 binding :: P ([Name], Ty)
-binding = do vars <- many var
+binding = do vars <- many1 var
              reservedOp ":"
              ty <- typeP
              return (vars, ty)
+
+bindingFix :: P (Name, Ty)
+bindingFix = do v <- var
+                reservedOp ":"
+                ty <- typeP
+                return (v, ty)
 
 binders :: P [([Name], Ty)]
 binders = many1 binding
 
 
-fix :: P NTerm
+
+fix :: P NSTerm
 fix = do i <- getPos
          reserved "fix"
-         (f, fty) <- parens binding
-         (x, xty) <- parens binding
+         (f, fty) <- parens bindingFix
+         (x, xty) <- parens bindingFix
          reservedOp "->"
          t <- tm
-         return (Fix i f fty x xty t)
+         return (SFix i f fty x xty t)
+
+
 
 -- | Parser de términos
-tm :: P NTerm
+tm :: P NSTerm
 tm = app <|> lam <|> ifz <|> unaryOp <|> fix
 
 -- | Parser de declaraciones
-{-
-decl :: P (Decl NSTerm)
-decl = do 
-     i <- getPos
-     (reserved "let"
-     (v <- var
-     ty <- typeP
-     reservedOp "="
-     t <- tm
-     return (Decl i v ty t)) <|>
-    (f <- var --usar otra funcion para parsear nombre de funcion sino
-    b <- binders
-    reservedOp ":"
-    ty <- typeP
-    reservedOp "="
-    t <- tm
-    return (DeclLetf i f b ty t)
-    ) <|>
-    ( reserved "rec"
-    f <- var --usar otra funcion para parsear nombre de funcion sino
-    b <- binders
-    reservedOp ":"
-    ty <- typeP
-    reservedOp "="
-    t <- tm
-    return (DeclLetRec i f b ty t))) <|>
-    (reserved "type"
-    n <- var
-    ty <- typeP
-    return (DeclType i n ty))
--}
-
 decl :: P (Decl NSTerm)
 decl = do
   i <- getPos
@@ -217,18 +194,19 @@ decl = do
       <|> (do 
             reserved "type"
             n <- var
+            reservedOp "="
             ty <- typeP
             return (DeclType i n ty))
 
   
 
 -- | Parser de programas (listas de declaraciones) 
-program :: P [Decl NTerm]
+program :: P [Decl NSTerm]
 program = many decl
 
 -- | Parsea una declaración a un término
 -- Útil para las sesiones interactivas
-declOrTm :: P (Either (Decl NTerm) NTerm)
+declOrTm :: P (Either (Decl NSTerm) NSTerm)
 declOrTm =  try (Left <$> decl) <|> (Right <$> tm)
 
 -- Corre un parser, chequeando que se pueda consumir toda la entrada
@@ -236,7 +214,7 @@ runP :: P a -> String -> String -> Either ParseError a
 runP p s filename = runParser (whiteSpace *> p <* eof) () filename s
 
 --para debugging en uso interactivo (ghci)
-parse :: String -> NTerm
+parse :: String -> NSTerm
 parse s = case runP tm s "" of
             Right t -> t
             Left e -> error ("no parse: " ++ show s)

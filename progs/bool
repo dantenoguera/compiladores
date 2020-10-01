@@ -1,0 +1,8 @@
+let true = 0
+
+let false = 1
+
+let ifthenelse = 
+    fun (p : Nat) ->
+        fun (t1 : Nat) ->
+            fun (t2: Nat) -> ifz p then t1 else t2
