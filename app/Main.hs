@@ -7,7 +7,6 @@ Copyright   : (c) Mauro Jaskelioff, Guido Martínez, 2020.
 License     : GPL-3
 Maintainer  : mauro@fceia.unr.edu.ar
 Stability   : experimental
-
 -}
 
 module Main where
@@ -82,14 +81,7 @@ parseIO filename p x = case runP p x filename of
                   Left e  -> throwError (ParseErr e)
                   Right r -> return r
 
-{-                  
-handleDecl ::  MonadPCF m => Decl NTerm -> m ()
-handleDecl (Decl p x t) = do
-        let tt = elab t
-        tcDecl (Decl p x tt)    
-        te <- eval tt
-        addDecl (Decl p x te)
--}
+
 ---------------------------------------------------------------------------------------------------------------------------------------
 -- Funciones para desucarar
 ---------------------------------------------------------------------------------------------------------------------------------------
@@ -100,48 +92,45 @@ typeVariableExpand ([],xty) tx   = tx
 
 desugarDecl :: Decl NSTerm -> Decl NTerm
 desugarDecl (Decl p n ty t) =  Decl p n ty (desugarTerm t)
-desugarDecl (DeclLetf p n args ty t) = (Decl p n (foldr typeVariableExpand ty args) (desugarTerm (SFun p args t)))
+desugarDecl (DeclLetf p n args ty t) = (Decl p n (foldr typeVariableExpand ty args) (desugarTerm (SLam p args t)))
 desugarDecl (DeclLetRec p n [([x],xty)] ty t) = Decl p n (FunTy xty ty) (desugarTerm (SFix p n (FunTy xty ty) x xty t))
-desugarDecl (DeclLetRec p n (((x1:rest), t1):xs) ty t) | null rest = desugarDecl (DeclLetRec p n [([x1], t1)] (foldr typeVariableExpand ty xs) (SFun p xs t))
-                                                       | otherwise = desugarDecl (DeclLetRec p n [([x1], t1)] (foldr typeVariableExpand ty ((rest, t1):xs)) (SFun p ((rest, t1):xs) t))
+desugarDecl (DeclLetRec p n (((x1:rest), t1):xs) ty t) | null rest = desugarDecl (DeclLetRec p n [([x1], t1)] (foldr typeVariableExpand ty xs) (SLam p xs t))
+                                                       | otherwise = desugarDecl (DeclLetRec p n [([x1], t1)] (foldr typeVariableExpand ty ((rest, t1):xs)) (SLam p ((rest, t1):xs) t))
 desugarDecl (Eval t) = Eval (desugarTerm t)
 
 desugarTerm :: NSTerm -> NTerm
 desugarTerm (SV p v) = V p v
 desugarTerm (SConst p c) = Const p c
-desugarTerm (SLam p n ty t) = Lam p n ty (desugarTerm t)
 desugarTerm (SApp p t1 t2) = App p (desugarTerm t1) (desugarTerm t2)
 desugarTerm (SUnaryOp p op t) = UnaryOp p op (desugarTerm t)
 desugarTerm (SFix p f tyf x tyx t) = Fix p f tyf x tyx (desugarTerm t)
 desugarTerm (SIfZ p t1 t2 t3) = IfZ p (desugarTerm t1) (desugarTerm t2) (desugarTerm t3)
 desugarTerm (SLet p n ty t1 t2) = App p (Lam p n ty (desugarTerm t2)) (desugarTerm t1)
-desugarTerm (SLetf p f xs ty t1 t2) = desugarTerm (SLet f (foldr typeVariableExpand ty xs)  (SFun p xs t1) t2)
-desugarTerm (SFun p xs t) = f p xs t
-                            where f p (((n:ns),nty):xs) t = Lam p n nty (f p ((ns, nty):xs)) t
+desugarTerm (SLetf p f xs ty t1 t2) = desugarTerm (SLet p f (foldr typeVariableExpand ty xs)  (SLam p xs t1) t2)
+desugarTerm (SLam p xs t) = f p xs (desugarTerm t)
+                            where f p (((n:ns),nty):xs) t = Lam p n nty (f p ((ns, nty):xs) t)
                                   f p (([],nty):xs) t = f p xs t
                                   f p [] t = t
 
-desugarTerm (SUnaryOpFree p op) = Lam p "x" Nat (UnaryOp p op) (V p "x")
+desugarTerm (SUnaryOpFree p op) = Lam p "x" NatTy (UnaryOp p op (V p "x"))
 desugarTerm (SLetRec p f [([x],xty)] ty t1 t2) = desugarTerm (SLet p f (FunTy xty ty) (SFix p f (FunTy xty ty) x xty t1) t2)
-desugarTerm (SLetRec p f (((x1:rest), ty1):xs) ty t1 t2) | null rest = desugarTerm (SLetRec p f [([x1], ty1)] (foldr typeVariableExpand ty xs) (SFun p xs t1) t2)
-                                                       | otherwise = desugarTerm (SLetRec  p f [([x1], ty1)] (foldr typeVariableExpand ty ((rest, t1):xs)) (SFun p ((rest, ty1):xs) t1) t2)
+desugarTerm (SLetRec p f (((x1:rest), ty1):xs) ty t1 t2) | null rest = desugarTerm (SLetRec p f [([x1], ty1)] (foldr typeVariableExpand ty xs) (SLam p xs t1) t2)
+                                                         | otherwise = desugarTerm (SLetRec  p f [([x1], ty1)] (foldr typeVariableExpand ty ((rest, ty1):xs)) (SLam p ((rest, ty1):xs) t1) t2)
 {-
-desugarTerm (SFun p xs t) = f p (reverse (map (\(ns,nty) -> (reverse ns, nty)) xs)) t
+desugarTerm (SLam p xs t) = f p (reverse (map (\(ns,nty) -> (reverse ns, nty)) xs)) t
                             where f p (((n:ns),nty):xs) t = f p ((ns,nty):xs) (Lam p n nty t)
                                   f p (([],nty):xs) t = f p xs t
                                   f p [] t = t
 -}
-Lam p n nty (f p ((ns, nty):xs)) t
-
-Lam info Name Ty (Tm info var)
-
-| SLet info Name Ty (STm info var) (STm info var)
-| SLetf info [([Name], Ty)] Ty (STm info var) (STm info var)
-| SFun info [([Name], Ty)] (STm info var)
-| SLetRec info [([Name], Ty)] Ty (STm info var) (STm info var)
-| SUnaryOpFree info UnaryOp
-
 ---------------------------------------------------------------------------------------------------------------------------------------
+{-                  
+handleDecl ::  MonadPCF m => Decl NTerm -> m ()
+handleDecl (Decl p x t) = do
+        let tt = elab t
+        tcDecl (Decl p x tt)    
+        te <- eval tt
+        addDecl (Decl p x te)
+-}
 
 handleDecl ::  MonadPCF m => Decl NSTerm -> m ()
 handleDecl (DeclType p n ty) = addTy n ty

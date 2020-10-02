@@ -29,7 +29,8 @@ lexer = Tok.makeTokenParser $
         emptyDef {
          commentLine    = "#",
          reservedNames = ["let", "fun", "fix", "then", "else", 
-                          "succ", "pred", "ifz", "Nat", "rec", "type"],
+                          "succ", "pred", "ifz", "Nat", "rec", 
+                          "type", "in", "rec"],
          reservedOpNames = ["->",":","="]
         }
 
@@ -65,10 +66,16 @@ getPos :: P Pos
 getPos = do pos <- getPosition
             return $ Pos (sourceLine pos) (sourceColumn pos)
 
+tyvar :: P Name
+tyvar = Tok.lexeme lexer $ do
+  c  <- upper
+  cs <- option "" identifier
+  return (c:cs)
+                    
 tyatom :: P Ty
 tyatom = (do reserved "Nat"
              return NatTy) <|>
-         (do v <- var
+         (do v <- tyvar
              return (NameTy v)) <|>
          parens typeP
 
@@ -82,7 +89,8 @@ typeP = try (do
           
 const :: P Const
 const = CNat <$> num
--- (a -> b -> b) -> b -> [a] -> b
+
+{-
 unaryOp :: P NSTerm
 unaryOp = do
   i <- getPos
@@ -95,23 +103,50 @@ unaryOp = do
        ("succ", SUnaryOp i Succ)
      , ("pred", SUnaryOp i Pred)
     ]
+-}
+
+unaryOpName :: P UnaryOp
+unaryOpName =
+      (reserved "succ" >> return Succ)
+  <|> (reserved "pred" >> return Pred)
+
+
+unaryOp :: P NSTerm
+unaryOp = do
+  i <- getPos
+  o <- unaryOpName
+  do a <- atom
+     return (SUnaryOp i o a)
+     <|> return (SUnaryOpFree i o)
+
 
 atom :: P NSTerm
 atom =     (flip SConst <$> const <*> getPos)
        <|> flip SV <$> var <*> getPos
        <|> parens tm
 
+binding :: P ([Name], Ty)
+binding = parens $ do vars <- many1 var
+                      reservedOp ":"
+                      ty <- typeP
+                      return (vars, ty)
+
+bindingFix :: P (Name, Ty) --binding que solo acepta una variable (solo para fix)
+bindingFix = parens $ do v <- var
+                         reservedOp ":"
+                         ty <- typeP
+                         return (v, ty)
+
+binders :: P [([Name], Ty)]
+binders = many1 binding
+
 lam :: P NSTerm
 lam = do i <- getPos
          reserved "fun"
-         (v,ty) <- parens $ do 
-                    v <- var
-                    reservedOp ":"
-                    ty <- typeP 
-                    return (v,ty)
+         xs <- binders
          reservedOp "->"
-         t <- tm
-         return (SLam i v ty t)
+         t <- tm 
+         return (SLam i xs t)
 
 -- Nota el parser app también parsea un solo atom.
 app :: P NSTerm
@@ -130,37 +165,57 @@ ifz = do i <- getPos
          e <- tm
          return (SIfZ i c t e)
 
-binding :: P ([Name], Ty)
-binding = do vars <- many1 var
-             reservedOp ":"
-             ty <- typeP
-             return (vars, ty)
-
-bindingFix :: P (Name, Ty)
-bindingFix = do v <- var
-                reservedOp ":"
-                ty <- typeP
-                return (v, ty)
-
-binders :: P [([Name], Ty)]
-binders = many1 binding
-
-
-
 fix :: P NSTerm
 fix = do i <- getPos
          reserved "fix"
-         (f, fty) <- parens bindingFix
-         (x, xty) <- parens bindingFix
+         (f, fty) <- bindingFix
+         (x, xty) <- bindingFix
          reservedOp "->"
          t <- tm
          return (SFix i f fty x xty t)
 
+letP :: P NSTerm
+letP = do i <- getPos
+          reserved "let"
+          v <- identifier
+          reservedOp ":"
+          ty <- typeP
+          reservedOp "="
+          t1 <- tm
+          reserved "in"
+          t2 <- tm
+          return (SLet i v ty t1 t2)
 
+letrec :: P NSTerm
+letrec = do i <- getPos
+            reserved "let"
+            reserved "rec"
+            v <- identifier
+            xs <- binders
+            reservedOp ":"
+            ty <- typeP
+            reservedOp "="
+            t1 <- tm
+            reserved "in"
+            t2 <- tm
+            return (SLetRec i v xs ty t1 t2)
+   
+letf :: P NSTerm
+letf = do i <- getPos
+          reserved "let"
+          v <- identifier
+          xs <- binders
+          reservedOp ":"
+          ty <- typeP
+          reservedOp "="
+          t1 <- tm
+          reserved "in"
+          t2 <- tm
+          return (SLetf i v xs ty t1 t2)
 
 -- | Parser de términos
 tm :: P NSTerm
-tm = app <|> lam <|> ifz <|> unaryOp <|> fix
+tm = app <|> lam <|> ifz <|> unaryOp <|> fix <|> letP <|> letrec <|> letf
 
 -- | Parser de declaraciones
 decl :: P (Decl NSTerm)
@@ -170,6 +225,7 @@ decl = do
     reserved "let"
     (do 
       v <- var
+      reservedOp ":"
       ty <- typeP
       reservedOp "="
       t <- tm

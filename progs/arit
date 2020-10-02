@@ -1,23 +1,23 @@
-let rest = 
+let rest : Nat -> Nat -> Nat = 
     fix (f : Nat -> Nat -> Nat) (m : Nat) ->
         fun (n : Nat) ->
             ifz n then m else pred(f m (pred n))
 
-let sum = 
+let sum : Nat -> Nat -> Nat = 
     fix (f : Nat -> Nat -> Nat) (m : Nat) ->
         fun (n : Nat) ->
             ifz n then m else succ(f m (pred n))
 
-let mult = 
+let mult : Nat -> Nat -> Nat = 
     fix (f : Nat -> Nat -> Nat) (m : Nat) ->
         fun (n : Nat) ->
             ifz n then 0 else sum m (f m (pred n))
 
-let exp =
+let exp : Nat -> Nat -> Nat =
     fix (f: Nat -> Nat -> Nat) (m: Nat) ->
         fun (n: Nat) ->
             ifz n then 1 else mult m (f m (pred n))
 
-let fact = 
+let fact : Nat -> Nat = 
     fix (f : Nat -> Nat) (m : Nat) ->
         ifz m then 1 else mult m (f (pred m))
