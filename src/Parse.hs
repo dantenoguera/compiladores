@@ -14,7 +14,7 @@ import Prelude hiding ( const )
 import Lang
 import Common
 import Text.Parsec hiding (runP)
-import Data.Char ( isNumber, ord )
+import Data.Char ( isNumber, ord, isUpper, isLower )
 import qualified Text.Parsec.Token as Tok
 import Text.ParserCombinators.Parsec.Language ( GenLanguageDef(..), emptyDef )
 
@@ -60,7 +60,9 @@ num :: P Int
 num = fromInteger <$> natural
 
 var :: P Name
-var = identifier 
+var = Tok.lexeme lexer $ do -- antes era identifier
+  (c:cs) <- identifier
+  if (isLower c) then return (c:cs) else parserZero
 
 getPos :: P Pos
 getPos = do pos <- getPosition
@@ -68,9 +70,8 @@ getPos = do pos <- getPosition
 
 tyvar :: P Name
 tyvar = Tok.lexeme lexer $ do
-  c  <- upper
-  cs <- option "" identifier
-  return (c:cs)
+  (c:cs) <- identifier
+  if (isUpper c) then return (c:cs) else parserZero
                     
 tyatom :: P Ty
 tyatom = (do reserved "Nat"
@@ -90,20 +91,6 @@ typeP = try (do
 const :: P Const
 const = CNat <$> num
 
-{-
-unaryOp :: P NSTerm
-unaryOp = do
-  i <- getPos
-  foldr (\(w, r) rest -> try (do 
-                                 reserved w -- succ o pred
-                                 a <- atom -- cte o var
-                                 return (r a)) <|> rest) parserZero (mapping i)
-  where
-   mapping i = [
-       ("succ", SUnaryOp i Succ)
-     , ("pred", SUnaryOp i Pred)
-    ]
--}
 
 unaryOpName :: P UnaryOp
 unaryOpName =
@@ -112,18 +99,24 @@ unaryOpName =
 
 
 unaryOp :: P NSTerm
-unaryOp = do
+unaryOp = try (do
   i <- getPos
   o <- unaryOpName
-  do a <- atom
-     return (SUnaryOp i o a)
-     <|> return (SUnaryOpFree i o)
+  a <- atom
+  return (SUnaryOp i o a))
+  <|> unaryOpFree
 
+unaryOpFree :: P NSTerm
+unaryOpFree = do
+  i <- getPos
+  o <- unaryOpName
+  return (SUnaryOpFree i o)
 
 atom :: P NSTerm
 atom =     (flip SConst <$> const <*> getPos)
        <|> flip SV <$> var <*> getPos
-       <|> parens tm
+       <|> unaryOpFree
+       <|> parens tm --al revez con unaryop
 
 binding :: P ([Name], Ty)
 binding = parens $ do vars <- many1 var
@@ -151,9 +144,9 @@ lam = do i <- getPos
 -- Nota el parser app también parsea un solo atom.
 app :: P NSTerm
 app = (do i <- getPos
-          f <- atom
-          args <- many atom
-          return (foldl (SApp i) f args))---Ver
+          f <- atom -- fun
+          args <- many atom -- pred y succ x
+          return (foldl (SApp i) f args)) ---Ver SApp snd (SApp f fst)
 
 ifz :: P NSTerm
 ifz = do i <- getPos
@@ -215,7 +208,7 @@ letf = do i <- getPos
 
 -- | Parser de términos
 tm :: P NSTerm
-tm = app <|> lam <|> ifz <|> unaryOp <|> fix <|> letP <|> letrec <|> letf
+tm = app <|> lam <|> ifz <|> unaryOp <|> fix <|> (try letP <|> try letf <|> letrec)
 
 -- | Parser de declaraciones
 decl :: P (Decl NSTerm)
@@ -223,7 +216,7 @@ decl = do
   i <- getPos
   (do 
     reserved "let"
-    (do 
+    try (do
       v <- var
       reservedOp ":"
       ty <- typeP
@@ -249,7 +242,7 @@ decl = do
             return (DeclLetRec i f b ty t)))
       <|> (do 
             reserved "type"
-            n <- var
+            n <- tyvar
             reservedOp "="
             ty <- typeP
             return (DeclType i n ty))
@@ -263,13 +256,13 @@ program = many decl
 -- | Parsea una declaración a un término
 -- Útil para las sesiones interactivas
 declOrTm :: P (Either (Decl NSTerm) NSTerm)
-declOrTm =  try (Left <$> decl) <|> (Right <$> tm)
+declOrTm =  try (Right <$> tm) <|> (Left <$> decl)
 
 -- Corre un parser, chequeando que se pueda consumir toda la entrada
 runP :: P a -> String -> String -> Either ParseError a
 runP p s filename = runParser (whiteSpace *> p <* eof) () filename s
 
---para debugging en uso interactivo (ghci)
+--para debugging (solo terminos!) en uso interactivo (ghci)
 parse :: String -> NSTerm
 parse s = case runP tm s "" of
             Right t -> t
