@@ -31,6 +31,8 @@ import Eval ( eval )
 import PPrint ( pp , ppTy )
 import MonadPCF
 import TypeChecker ( tc, tcDecl )
+import CEK ( seek, destroy, valToTerm )
+
 
 prompt :: String
 prompt = "PCF> "
@@ -156,7 +158,7 @@ handleDecl ndecl = do
         ndecl' <- desugarDecl ndecl
         let decl@(Decl p x ty t) = elab_decl ndecl'
         tcDecl decl
-        te <- eval t
+        te <- runCEK t --te <- eval t 
         addDecl (Decl p x ty te)
         
 data Command = Compile CompileForm
@@ -246,7 +248,7 @@ handleTerm t = do
          let tt = elab t'
          s <- get
          ty <- tc tt (tyEnv s)
-         te <- eval tt
+         te <- runCEK tt -- te <- eval tt
          printPCF (pp te ++ " : " ++ ppTy ty)
 
 printPhrase :: MonadPCF m => String -> m ()
@@ -271,3 +273,8 @@ typeCheckPhrase x = do
          s <- get
          ty <- tc tt (tyEnv s)
          printPCF (ppTy ty)
+
+
+runCEK :: MonadPCF m => Term -> m Term
+runCEK t = do val <- seek t [] []
+              return (valToTerm val)

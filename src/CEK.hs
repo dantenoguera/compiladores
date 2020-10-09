@@ -9,17 +9,25 @@ Stability   : experimental
 Este módulo realizara la aplicacion de la maquina CEK en nuestros terminos
 -}
 
-module CEK (seek, destroy) where
+module CEK (seek, destroy, valToTerm) where
 
+import Subst ( substN )
+import Common
 import Lang
-import MonadPCF ( MonadPCF, lookupDecl, failPCF )
+import MonadPCF ( MonadPCF, lookupDecl, failPCF, printPCF )
 import PPrint ( ppName )
 
 type Env = [Val]
 
-data Val = N Const | C Clos
+data Val = 
+    N Const 
+    | C Clos 
+    deriving Show
 
-data Clos = CFun Env Name Term | CFix Env Name Name Term
+data Clos = 
+    CFun Env Name Ty Term 
+    | CFix Env Name Ty Name Ty Term
+    deriving Show
 
 data Fr = 
     HApp Env Term 
@@ -42,16 +50,23 @@ seek (V _ (Free nm)) p k    = do
       Just t -> seek t p k
 seek (V _ (Bound n)) p k = destroy (p!!n) k -- bound respeta que las listas se indexen desde 0?
 seek (Const _ (CNat n)) p k = destroy (N (CNat n)) k
-seek (Lam _ x _ t) p k = destroy (C (CFun p x t)) k
-seek (Fix _ f _ x _ t) p k = destroy (C (CFix p f x t)) k
+seek (Lam _ x ty t) p k = destroy (C (CFun p x ty t)) k
+seek (Fix _ f fty x xty t) p k = destroy (C (CFix p f fty x xty t)) k
 
 
 destroy :: MonadPCF m => Val -> Kont -> m Val
-destroy (N (CNat 0)) ((HUnaryOp Pred):k) = return (N (CNat 0))
-destroy (N (CNat np)) ((HUnaryOp Pred):k) = return (N (CNat (np-1)))
-destroy (N (CNat n)) ((HUnaryOp Succ):k) = return (N (CNat (n+1)))
+destroy (N (CNat 0)) ((HUnaryOp Pred):k) = destroy (N (CNat 0)) k
+destroy (N (CNat np)) ((HUnaryOp Pred):k) = destroy (N (CNat (np-1))) k
+destroy (N (CNat n)) ((HUnaryOp Succ):k) = destroy (N (CNat (n+1))) k
 destroy (N (CNat 0)) ((HIfz p t1 t2):k) = seek t1 p k
 destroy (N (CNat np)) ((HIfz p t1 t2):k) = seek t2 p k
 destroy (C c) ((HApp p2 t2):k) = seek t2 p2 ((HClos c):k)
-destroy v ((HClos (CFun p x t)):k) = seek t (v:p) k --ver el tema de x->v en p
-destroy v ((HClos (CFix p f x t)):k) = seek t (((C (CFix p f x t)):v:p)) k
+destroy v ((HClos (CFun p x _ t)):k) = seek t (v:p) k --ver el tema de x->v en p
+destroy v ((HClos (CFix p f fty x xty t)):k) = seek t ((v:(C (CFix p f fty x xty t)):p)) k
+destroy v [] = return v
+
+
+valToTerm :: Val -> Term
+valToTerm (N (CNat n)) = Const NoPos (CNat n)
+valToTerm (C (CFun p x xty t)) = substN (map valToTerm p) (Lam NoPos x xty t)
+valToTerm (C (CFix p f fty x xty t)) =  substN (map valToTerm p) (Fix NoPos f fty x xty t)

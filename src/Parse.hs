@@ -115,8 +115,8 @@ unaryOpFree = do
 atom :: P NSTerm
 atom =     (flip SConst <$> const <*> getPos)
        <|> flip SV <$> var <*> getPos
-       <|> unaryOpFree
        <|> parens tm --al revez con unaryop
+       <|> unaryOpFree
 
 binding :: P ([Name], Ty)
 binding = parens $ do vars <- many1 var
