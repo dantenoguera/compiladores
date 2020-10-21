@@ -58,7 +58,14 @@ tc (Fix p f fty x xty t) bs = do
          ty' <- tc t' ((x,xty):(f,fty):bs)
          expect cod ty' t'
          return fty
+tc (Let i n ty t1 t2) bs = do
+  ty1 <- tc t1 bs
+  ty2 <- tc (open n t2) ((n, ty):bs)
+  (dom, cod) <- domCod (Lam i n ty t2) (FunTy ty ty2)
+  expect dom ty1 t1
+  return cod
 
+         
 
 -- | @'typeError' t s@ lanza un error de tipo para el término @t@ 
 typeError :: MonadPCF m => Term   -- ^ término que se está chequeando  

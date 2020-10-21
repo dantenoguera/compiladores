@@ -33,15 +33,36 @@ import MonadPCF
 import TypeChecker ( tc, tcDecl )
 import CEK ( seek, destroy, valToTerm )
 
+import Options.Applicative
 
 prompt :: String
 prompt = "PCF> "
 
+{-
 main :: IO ()
 main = do args <- getArgs
           runPCF (runInputT defaultSettings (main' args))
           return ()
-          
+-}
+
+main :: IO ()
+main = execParser opts >>= go
+  where
+    opts = info (parseArgs <**> helper) 
+    ( fullDesc
+      <> progDesc "Compilador de PCF"
+      <> header "Compilador de PCF de la materia Compiladores 2020" )
+    
+    go :: (Mode,[FilePath]) -> IO ()
+    go (Interactive,files) =
+      do runPCF (runInputT defaultSettings (main' files))
+        return ()
+    go (Typecheck, files) = undefined
+    go (Bytecompile, files) = undefined
+    go (Run,files) = undefined
+
+
+
 main' :: (MonadPCF m, MonadMask m) => [String] -> InputT m ()
 main' args = do
         lift $ catchErrors $ compileFiles args
@@ -127,7 +148,12 @@ desugarTerm (SIfZ p t1 t2 t3) = do t1' <- desugarTerm t1
 desugarTerm (SLet p n ty t1 t2) = do ty' <- desugarTy ty
                                      t1' <- desugarTerm t1
                                      t2' <- desugarTerm t2
+                                     return (Let p n ty' t1' t2')
+{-desugarTerm (SLet p n ty t1 t2) = do ty' <- desugarTy ty
+                                     t1' <- desugarTerm t1
+                                     t2' <- desugarTerm t2
                                      return (App p (Lam p n ty' t2') t1')
+-}
 desugarTerm (SLetf p f xs ty t1 t2) = desugarTerm (SLet p f (foldr typeVariableExpand ty xs) (SLam p xs t1) t2)       
 desugarTerm (SLam p xs t) = do t' <- desugarTerm t
                                let (Lam p' n' nty t'') = f p xs t'
@@ -150,6 +176,7 @@ desugarTy NatTy = return NatTy
 desugarTy (FunTy t1 t2) = do t1' <- desugarTy t1
                              t2' <- desugarTy t2
                              return (FunTy t1 t2)
+
 ---------------------------------------------------------------------------------------------------------------------------------------
 
 handleDecl ::  MonadPCF m => Decl NSTerm -> m ()
@@ -278,3 +305,30 @@ typeCheckPhrase x = do
 runCEK :: MonadPCF m => Term -> m Term
 runCEK t = do val <- seek t [] []
               return (valToTerm val)
+
+
+
+
+-- lineas de comandos
+
+data Mode = Interactive
+          | Typecheck
+          | Bytecompile
+          | Run
+
+-- | Parser de banderas
+parseMode :: Parser Mode
+parseMode =
+    flag’ Typecheck ( long "typecheck" <> short ’t’ <> help "Solo chequear tipos")
+<|> flag’ Bytecompile (long "bytecompile" <> short ’c’ <> help "Compilar a la BVM")
+<|> flag’ Run (long "run" <> short ’r’ <> help "Ejecutar bytecode en la BVM")
+<|> flag Interactive Interactive ( long "interactive" <> short ’i’
+                                    <> help "Ejecutar en forma interactiva" )
+
+-- | Parser de opciones general, consiste de un modo y una lista de archivos a procesar
+parseArgs :: Parser (Mode, [FilePath])
+parseArgs = (,) <$> parseMode <*> many (argument str (metavar "FILES..."))
+
+
+
+

@@ -53,6 +53,6 @@ eval (IfZ p c t e) = do
        Const _ (CNat 0) -> eval t
        Const _ (CNat _) -> eval e
        c' -> abort ("Error de tipo en runtime!")
-
+eval (Let _ _ _ _ _) = undefined
 -- nada más para reducir
 eval t = return t

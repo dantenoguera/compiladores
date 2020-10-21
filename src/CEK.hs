@@ -48,11 +48,11 @@ seek (V _ (Free nm)) p k    = do
     case mtm of 
       Nothing -> failPCF $ "Error de ejecución: variable no declarada: " ++ ppName nm 
       Just t -> seek t p k
-seek (V _ (Bound n)) p k = destroy (p!!n) k -- bound respeta que las listas se indexen desde 0?
+seek (V _ (Bound n)) p k = destroy (p!!n) k
 seek (Const _ (CNat n)) p k = destroy (N (CNat n)) k
 seek (Lam _ x ty t) p k = destroy (C (CFun p x ty t)) k
 seek (Fix _ f fty x xty t) p k = destroy (C (CFix p f fty x xty t)) k
-
+seek (Let i n ty t1 t2) p k = seek (App i (Lam i n ty t2) t1) p k
 
 destroy :: MonadPCF m => Val -> Kont -> m Val
 destroy (N (CNat 0)) ((HUnaryOp Pred):k) = destroy (N (CNat 0)) k

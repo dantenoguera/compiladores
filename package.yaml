@@ -26,6 +26,7 @@ dependencies:
 - pretty
 - mtl
 - exceptions
+- optparse-applicative
 
 
 library:
