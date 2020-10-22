@@ -98,32 +98,18 @@ unaryOpName =
   <|> (reserved "pred" >> return Pred)
 
 
---unaryOp :: P NSTerm
---unaryOp = try (do
---  i <- getPos
---  o <- unaryOpName
---  a <- atom
---  return (SUnaryOp i o a))
---  <|> unaryOpFree
-
-unaryOp :: P NSTerm
-unaryOp = do
-  i <- getPos
-  o <- unaryOpName
-  a <- atom
-  return (SUnaryOp i o a)
-
 unaryOpFree :: P NSTerm
 unaryOpFree = do
   i <- getPos
   o <- unaryOpName
   return (SUnaryOpFree i o)
 
+
 atom :: P NSTerm
 atom =     (flip SConst <$> const <*> getPos)
        <|> flip SV <$> var <*> getPos
-       <|> parens tm --al revez con unaryop
---       <|> unaryOpFree
+       <|> parens tm
+       <|> unaryOpFree
 
 binding :: P ([Name], Ty)
 binding = parens $ do vars <- many1 var
@@ -145,21 +131,15 @@ lam = do i <- getPos
          reserved "fun"
          xs <- binders
          reservedOp "->"
-         t <- tm 
+         t <- tm
          return (SLam i xs t)
 
 -- Nota el parser app también parsea un solo atom.
 app :: P NSTerm
 app = (do i <- getPos
-          f <- atom -- fun
-          args <- many (atom <|> unaryOpFree)-- pred y succ x
-          return (foldl (SApp i) f args)) ---Ver SApp snd (SApp f fst)
-
-app2 :: P NSTerm
-app2 = (do i <- getPos
-           f <- atom
-           args <- many unaryOpFree
-           return (foldl (SApp i) f args))
+          f <- atom
+          args <- many atom
+          return (foldl (SApp i) f args))
 
 ifz :: P NSTerm
 ifz = do i <- getPos
@@ -221,7 +201,7 @@ letf = do i <- getPos
 
 -- | Parser de términos
 tm :: P NSTerm
-tm = app <|> lam <|> ifz <|> try unaryOp <|> unaryOpFree <|> fix <|> (try letP <|> try letf <|> letrec)
+tm = app <|> lam <|> ifz <|> fix <|> (try letP <|> try letf <|> letrec)
 
 -- | Parser de declaraciones
 decl :: P (Decl NSTerm)

@@ -1,0 +1,44 @@
+## Terminos para testear parseo
+## PCF0
+5
+(fun (x : Nat) -> pred x) 3
+ifz 0 then 2 else 3
+fix (suma: Nat -> Nat -> Nat) (m: Nat) -> fun (n:Nat) -> ifz n then m else succ (suma m (pred n))
+
+
+## PCF1 (terminos)
+## 1.1
+let x : Nat = 1 in succ x
+
+## 1.2
+let f (x : Nat) : Nat = succ x in f 2
+
+##1.3
+
+## 1.4
+let suc2 (x y: Nat) (z:Nat) : Nat = succ (succ x) in suc2 1 0 0
+
+## 1.5
+
+## 1.6
+## Error
+let rec suma (x y: Nat) : Nat = ifz x then y else succ (suma (pred x) y) in suma 1 2
+
+
+## PCF1 (declaraciones)
+## 2.1
+let f (x : Nat) : Nat = succ x
+
+## 2.2
+let suc2 (x y: Nat) (z:Nat) : Nat = succ (succ x)
+let f (x y z : Nat) : Nat = x
+
+## 2.3
+
+## 2.4
+let rec suma (x y: Nat) : Nat = ifz x then y else succ (suma (pred x) y)
+
+# 3 (Operador)
+(fun (f : Nat -> Nat) -> f) succ
+let x : Nat = 10
+(fun (f : Nat -> Nat) (y : Nat) -> f y) pred (succ x)

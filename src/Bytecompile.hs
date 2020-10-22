@@ -16,6 +16,7 @@ module Bytecompile
 import Lang 
 import Subst
 import MonadPCF
+import Common
 
 import qualified Data.ByteString.Lazy as BS
 import Data.Binary ( Word32, Binary(put, get), decode, encode )
@@ -24,6 +25,7 @@ import Data.Binary.Get ( getWord32le, isEmpty )
 
 type Opcode = Int
 type Bytecode = [Int]
+type Module = [Decl Term]
 
 newtype Bytecode32 = BC { un32 :: [Word32] }
 
@@ -66,19 +68,35 @@ pattern SHIFT    = 12
 pattern DROP     = 13
 pattern PRINT    = 14
 
+
+
+
 bc :: MonadPCF m => Term -> m Bytecode
-bc t = error "implementame"
+bc (V _ (Bound i)) = return [i, ACCESS]
+bc (Const _ (CNat c)) = return [c, ACCESS]
+bc (Lam _ _ _ t) = do t' <- bc t
+                      return ([FUNCTION, length t'] ++ t' ++ [RETURN])
+bc (App _ t1 t2) =  do t1' <- bc t1
+                       t2' <- bc t2
+                       return (t1'++ t2'++ [CALL])
+bc (UnaryOp _ Succ t) = do t' <- bc t
+                           return (t' ++ [SUCC])
+bc (UnaryOp _ Pred t) = do t' <- bc t
+                           return (t' ++ [PRED])
+bc (Fix _ _ _ _ _ t) = do t' <- bc t
+                          return ([FUNCTION, length t'] ++ t' ++ [RETURN, FIX])
+bc (IfZ _ c t1 t2) = do c' <- bc c
+                        t1' <- bc t1
+                        t2' <- bc t2
+                        return (t2' ++ t1' ++ c' ++ [IFZ])
+bc (Let _ _ _ t1 t2) = do t1' <- bc t1
+                          t2' <- bc t2
+                          return (t1' ++ [SHIFT] ++ t2' ++ [DROP])
 
 
-data Tm info var = 
-    V info var
-  | Const info Const
-  | Lam info Name Ty (Tm info var)
-  | App info (Tm info var) (Tm info var)
-  | UnaryOp info UnaryOp (Tm info var)
-  | Fix info Name Ty Name Ty (Tm info var)
-  | IfZ info (Tm info var) (Tm info var) (Tm info var)
-  | Let info Name Ty (Tm info var) (Tm info var)
+nestDecl :: Module -> Term
+nestDecl [(Decl p n ty b)] = close n (Let p n ty b (V NoPos (Free n)))
+nestDecl ((Decl p n ty b) : ds) = close n (Let p n ty b (nestDecl ds))
 
 bytecompileModule :: MonadPCF m => Module -> m Bytecode
 bytecompileModule mod = error "implementame"
@@ -99,4 +117,4 @@ runBC :: MonadPCF m => Bytecode -> m ()
 runBC c = error "implementame"
 
 
-nestDecl :: [Decl Term] -> 
+

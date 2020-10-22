@@ -33,7 +33,7 @@ import MonadPCF
 import TypeChecker ( tc, tcDecl )
 import CEK ( seek, destroy, valToTerm )
 
-import Options.Applicative
+import Options.Applicative hiding ( Const )
 
 prompt :: String
 prompt = "PCF> "
@@ -49,18 +49,17 @@ main :: IO ()
 main = execParser opts >>= go
   where
     opts = info (parseArgs <**> helper) 
-    ( fullDesc
-      <> progDesc "Compilador de PCF"
-      <> header "Compilador de PCF de la materia Compiladores 2020" )
-    
-    go :: (Mode,[FilePath]) -> IO ()
-    go (Interactive,files) =
-      do runPCF (runInputT defaultSettings (main' files))
-        return ()
-    go (Typecheck, files) = undefined
-    go (Bytecompile, files) = undefined
-    go (Run,files) = undefined
-
+                ( fullDesc
+                  <> progDesc "Compilador de PCF"
+                  <> header "Compilador de PCF de la materia Compiladores 2020" )
+                
+go :: (Mode,[FilePath]) -> IO ()
+go (Interactive,files) =
+  do runPCF (runInputT defaultSettings (main' files))
+     return ()
+go (Typecheck, files) = undefined
+go (Bytecompile, files) = undefined
+go (Run,files) = undefined
 
 
 main' :: (MonadPCF m, MonadMask m) => [String] -> InputT m ()
@@ -110,9 +109,8 @@ parseIO filename p x = case runP p x filename of
 ---------------------------------------------------------------------------------------------------------------------------------------
 
 typeVariableExpand :: ([Name],Ty) -> Ty -> Ty
-typeVariableExpand (n:ns,xty) tx = typeVariableExpand (ns,xty) (FunTy xty tx)--no hago desugar type por que lo hago en el tipo resultante
+typeVariableExpand (n:ns,xty) tx = typeVariableExpand (ns,xty) (FunTy xty tx) --no hago desugar type por que lo hago en el tipo resultante
 typeVariableExpand ([],xty) tx   = tx
-
 desugarDecl :: MonadPCF m => Decl NSTerm -> m (Decl NTerm)
 desugarDecl (Decl p n ty t) =  do ty' <- desugarTy ty
                                   t' <- desugarTerm t
@@ -132,11 +130,11 @@ desugarDecl (Eval t) = do t' <- desugarTerm t
 desugarTerm :: MonadPCF m => NSTerm -> m NTerm
 desugarTerm (SV p v) = return (V p v)
 desugarTerm (SConst p c) = return (Const p c)
+desugarTerm (SApp p (SUnaryOpFree _ op) t2) = do t2' <- desugarTerm t2
+                                                 return (UnaryOp p op t2') --ojo con que p ponemos
 desugarTerm (SApp p t1 t2) = do t1' <- desugarTerm t1
                                 t2' <- desugarTerm t2
                                 return (App p t1' t2')
-desugarTerm (SUnaryOp p op t) = do t' <- desugarTerm t
-                                   return (UnaryOp p op t')
 desugarTerm (SFix p f tyf x tyx t) = do tyf' <- desugarTy tyf
                                         tyx' <- desugarTy tyx
                                         t' <- desugarTerm t
@@ -149,11 +147,6 @@ desugarTerm (SLet p n ty t1 t2) = do ty' <- desugarTy ty
                                      t1' <- desugarTerm t1
                                      t2' <- desugarTerm t2
                                      return (Let p n ty' t1' t2')
-{-desugarTerm (SLet p n ty t1 t2) = do ty' <- desugarTy ty
-                                     t1' <- desugarTerm t1
-                                     t2' <- desugarTerm t2
-                                     return (App p (Lam p n ty' t2') t1')
--}
 desugarTerm (SLetf p f xs ty t1 t2) = desugarTerm (SLet p f (foldr typeVariableExpand ty xs) (SLam p xs t1) t2)       
 desugarTerm (SLam p xs t) = do t' <- desugarTerm t
                                let (Lam p' n' nty t'') = f p xs t'
@@ -306,11 +299,7 @@ runCEK :: MonadPCF m => Term -> m Term
 runCEK t = do val <- seek t [] []
               return (valToTerm val)
 
-
-
-
 -- lineas de comandos
-
 data Mode = Interactive
           | Typecheck
           | Bytecompile
@@ -319,11 +308,11 @@ data Mode = Interactive
 -- | Parser de banderas
 parseMode :: Parser Mode
 parseMode =
-    flag’ Typecheck ( long "typecheck" <> short ’t’ <> help "Solo chequear tipos")
-<|> flag’ Bytecompile (long "bytecompile" <> short ’c’ <> help "Compilar a la BVM")
-<|> flag’ Run (long "run" <> short ’r’ <> help "Ejecutar bytecode en la BVM")
-<|> flag Interactive Interactive ( long "interactive" <> short ’i’
-                                    <> help "Ejecutar en forma interactiva" )
+    flag' Typecheck ( long "typecheck" <> short 't' <> help "Solo chequear tipos")
+    <|> flag' Bytecompile (long "bytecompile" <> short 'c' <> help "Compilar a la BVM")
+    <|> flag' Run (long "run" <> short 'r' <> help "Ejecutar bytecode en la BVM")
+    <|> flag Interactive Interactive ( long "interactive" <> short 'i'
+                                                          <> help "Ejecutar en forma interactiva" )
 
 -- | Parser de opciones general, consiste de un modo y una lista de archivos a procesar
 parseArgs :: Parser (Mode, [FilePath])

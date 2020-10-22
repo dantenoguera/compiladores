@@ -27,6 +27,8 @@ dependencies:
 - mtl
 - exceptions
 - optparse-applicative
+- bytestring
+- binary
 
 
 library:
