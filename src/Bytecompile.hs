@@ -69,11 +69,9 @@ pattern DROP     = 13
 pattern PRINT    = 14
 
 
-
-
 bc :: MonadPCF m => Term -> m Bytecode
-bc (V _ (Bound i)) = return [i, ACCESS]
-bc (Const _ (CNat c)) = return [c, ACCESS]
+bc (V _ (Bound i)) = return [ACCESS, i]
+bc (Const _ (CNat c)) = return [CONST, c]
 bc (Lam _ _ _ t) = do t' <- bc t
                       return ([FUNCTION, length t'] ++ t' ++ [RETURN])
 bc (App _ t1 t2) =  do t1' <- bc t1
@@ -88,7 +86,7 @@ bc (Fix _ _ _ _ _ t) = do t' <- bc t
 bc (IfZ _ c t1 t2) = do c' <- bc c
                         t1' <- bc t1
                         t2' <- bc t2
-                        return (t2' ++ t1' ++ c' ++ [IFZ])
+                        return (c' ++ [IFZ] ++ [length t1', length t2'] ++ t1' ++ t2')
 bc (Let _ _ _ t1 t2) = do t1' <- bc t1
                           t2' <- bc t2
                           return (t1' ++ [SHIFT] ++ t2' ++ [DROP])
@@ -99,7 +97,7 @@ nestDecl [(Decl p n ty b)] = close n (Let p n ty b (V NoPos (Free n)))
 nestDecl ((Decl p n ty b) : ds) = close n (Let p n ty b (nestDecl ds))
 
 bytecompileModule :: MonadPCF m => Module -> m Bytecode
-bytecompileModule mod = error "implementame"
+bytecompileModule mod = bc (nestDecl mod)
 
 -- | Toma un bytecode, lo codifica y lo escribe un archivo 
 bcWrite :: Bytecode -> FilePath -> IO ()
@@ -113,8 +111,37 @@ bcWrite bs filename = BS.writeFile filename (encode $ BC $ fromIntegral <$> bs)
 bcRead :: FilePath -> IO Bytecode
 bcRead filename = map fromIntegral <$> un32  <$> decode <$> BS.readFile filename
 
+type Env = [Val]
+data Val = I Int | Fun Env Bytecode | RA Env Bytecode
+
 runBC :: MonadPCF m => Bytecode -> m ()
-runBC c = error "implementame"
+runBC bc = runBC' (bc ++ [PRINT, STOP]) [] []
 
-
-
+runBC' :: MonadPCF m => Bytecode -> [Val] -> [Val] -> m ()
+runBC' (CONST:c:xs) e s = runBC' xs e ((I c):s)
+runBC' (ACCESS:i:xs) e s = runBC' xs e ((e!!i):s)
+runBC' (FUNCTION:l:xs) e s = runBC' xs e ((Fun e (take l xs)):s)
+runBC' (RETURN:_) _ (v:(RA e bc):s) = runBC' bc e (v:s)
+runBC' (RETURN:_) _ _ = error "Error RETURN"
+runBC' (CALL:xs) e (v:(Fun ef bc):s) = runBC' bc (v:ef) ((RA e xs):s)
+runBC' (CALL:_) _ _ = error "Error CALL"
+runBC' (SUCC:xs) e ((I n):s) = runBC' xs e ((I (n+1)):s)
+runBC' (SUCC:_) _ _ = error "Error SUCC"
+runBC' (PRED:xs) e ((I n):s) = case n of
+                                0 -> runBC' xs e ((I 0):s)
+                                x -> runBC' xs e ((I (x-1)):s)
+runBC' (PRED:_) _ _ = error "Error PRED"
+runBC' (FIX:xs) e ((Fun e' bc):s) = runBC' xs e ((Fun ((Fun efix bc):e) bc):s)
+                                    where efix = (Fun efix bc):e
+runBC' (IFZ:xl:yl:xs) e ((I c):s) = case c of
+                                      0 -> let (x',ys) = splitAt xl xs
+                                            in runBC' (x'++(drop yl ys)) e s
+                                      _ -> runBC' (drop xl xs) e s
+runBC' (IFZ:_) _ _ = error "Error IFZ"
+runBC' (SHIFT:xs) e (v:s) = runBC' xs (v:e) s
+runBC' (DROP:xs) (v:e) s = runBC' xs e s
+runBC' (JUMP:n:xs) e s = runBC' (drop n xs) e s
+runBC' (PRINT:xs) e ((I n):s) = do printPCF (show n)
+                                   runBC' xs e ((I n):s)
+runBC' (PRINT:_) _ _ = error "Error PRINT"
+runBC' (STOP:_) _ _ = return ()

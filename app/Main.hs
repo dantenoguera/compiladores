@@ -32,6 +32,7 @@ import PPrint ( pp , ppTy )
 import MonadPCF
 import TypeChecker ( tc, tcDecl )
 import CEK ( seek, destroy, valToTerm )
+import Bytecompile
 
 import Options.Applicative hiding ( Const )
 
@@ -57,9 +58,26 @@ go :: (Mode,[FilePath]) -> IO ()
 go (Interactive,files) =
   do runPCF (runInputT defaultSettings (main' files))
      return ()
-go (Typecheck, files) = undefined
-go (Bytecompile, files) = undefined
-go (Run,files) = undefined
+go (Typecheck, files) = typeCheckFiles files
+go (Bytecompile, files) = byteCompileFies files
+go (Run, files) = runFiles files
+
+typeCheckFiles :: [FilePath] -> IO ()  
+typeCheckFiles = undefined
+
+byteCompileFiles :: [FilePath] -> IO ()
+byteCompileFiles = undefined
+
+runFiles :: [FilePath] -> IO ()
+runFiles (f:fs) = do b <- bcRead f
+                  runPCF (runBC b)
+                  runFiles fs
+runFiles [] = return ()
+
+
+
+  
+  
 
 
 main' :: (MonadPCF m, MonadMask m) => [String] -> InputT m ()
