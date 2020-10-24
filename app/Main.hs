@@ -59,25 +59,46 @@ go (Interactive,files) =
   do runPCF (runInputT defaultSettings (main' files))
      return ()
 go (Typecheck, files) = typeCheckFiles files
-go (Bytecompile, files) = byteCompileFies files
+go (Bytecompile, files) = byteCompileFiles files
 go (Run, files) = runFiles files
 
 typeCheckFiles :: [FilePath] -> IO ()  
 typeCheckFiles = undefined
 
-byteCompileFiles :: [FilePath] -> IO ()
-byteCompileFiles = undefined
+--------------
+-- COMPILACION
+--------------
 
+byteCompileFiles :: [FilePath] -> IO ()
+byteCompileFiles (f:fs) = do runPCF (byteCompileFile f)
+                             byteCompileFiles fs
+byteCompileFiles [] = return ()
+
+byteCompileFile :: MonadPCF m => FilePath -> m ()
+byteCompileFile f = do
+  printPCF ("Abriendo "++f++"...")
+  let filename = reverse(dropWhile isSpace (reverse f))
+  x <- liftIO $ catch (readFile filename)
+              (\e -> do let err = show (e :: IOException)
+                        hPutStr stderr ("No se pudo abrir el archivo " ++ filename ++ ": " ++ err ++"\n")
+                        return "")
+  decls <- parseIO filename program x
+  decls' <- fun decls
+  c <- bytecompileModule decls'
+  liftIO $ bcWrite c (f ++ ".byte")
+  return ()
+  
+fun :: MonadPCF m => [Decl NSTerm] -> m [Decl Term]
+fun (d : ds) = do d' <- desugarDecl d
+                  ds' <- fun ds
+                  return ((elab_decl d') : ds')
+fun [] = return []
+---------
 runFiles :: [FilePath] -> IO ()
 runFiles (f:fs) = do b <- bcRead f
-                  runPCF (runBC b)
-                  runFiles fs
+                     runPCF (runBC b)
+                     runFiles fs
 runFiles [] = return ()
-
-
-
-  
-  
 
 
 main' :: (MonadPCF m, MonadMask m) => [String] -> InputT m ()
@@ -116,6 +137,7 @@ compileFile f = do
     decls <- parseIO filename program x
     mapM_ handleDecl decls
 
+    
 parseIO ::  MonadPCF m => String -> P a -> String -> m a
 parseIO filename p x = case runP p x filename of
                   Left e  -> throwError (ParseErr e)

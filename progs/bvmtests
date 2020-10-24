@@ -1,0 +1,6 @@
+# let p1 : Nat = succ 1
+# let p2 : Nat = pred 4
+# let p3 : Nat -> Nat  = fun (x : Nat) -> succ pred x (index too large)
+# let p4 : Nat -> Nat  = fun (x : Nat) -> x (error RETURN, O)
+let p5 : Nat  = (fun (x : Nat) -> x) 1 #(error RETURN)
+
