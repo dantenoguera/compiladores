@@ -1,6 +1,11 @@
 # let p1 : Nat = succ 1
 # let p2 : Nat = pred 4
-# let p3 : Nat -> Nat  = fun (x : Nat) -> succ pred x (index too large)
-# let p4 : Nat -> Nat  = fun (x : Nat) -> x (error RETURN, O)
-let p5 : Nat  = (fun (x : Nat) -> x) 1 #(error RETURN)
+# let p3 : Nat  = (fun (x : Nat) -> x) 1
+# let p4 : Nat = ifz 3 then 1 else 2
+# let p5 : Nat = ifz ((fun (x : Nat) -> x) 1) then pred 1 else pred 0
+# let rec sum (m n : Nat) : Nat =
+#     ifz n then m
+#         else sum (succ m) (pred n)
+# let p6 : Nat = sum 5 6
 
+let p7 : Nat = 1

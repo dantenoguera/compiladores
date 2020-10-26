@@ -120,7 +120,7 @@ runBC bc = runBC' (bc ++ [PRINT, STOP]) [] []
 runBC' :: MonadPCF m => Bytecode -> [Val] -> [Val] -> m ()
 runBC' (CONST:c:xs) e s = runBC' xs e ((I c):s)
 runBC' (ACCESS:i:xs) e s = runBC' xs e ((e!!i):s)
-runBC' (FUNCTION:l:xs) e s = runBC' xs e ((Fun e (take l xs)):s)
+runBC' (FUNCTION:l:xs) e s = runBC' (drop (l+1) xs) e ((Fun e (take (l+1) xs)):s)
 runBC' (RETURN:_) _ (v:(RA e bc):s) = runBC' bc e (v:s)
 runBC' (RETURN:_) _ _ = error "Error RETURN"
 runBC' (CALL:xs) e (v:(Fun ef bc):s) = runBC' bc (v:ef) ((RA e xs):s)
@@ -145,3 +145,12 @@ runBC' (PRINT:xs) e ((I n):s) = do printPCF (show n)
                                    runBC' xs e ((I n):s)
 runBC' (PRINT:_) _ _ = error "Error PRINT"
 runBC' (STOP:_) _ _ = return ()
+
+-- let p5 : Nat  = (fun (x : Nat) -> x) 1
+-- [4,2,3,0,1,2,1,5,12,3,0,13]
+-- [FUNCTION,(2)CONST,ACCESS,0,RETURN,CONST,(1)RETURN,CALL,SHIFT,ACCESS,0,DROP]
+
+-- let p5 : Nat  = (fun (x : Nat) -> x) 1 #(error RETURN)
+-- let p5 : Nat = (fun (x : Nat) -> x) 1 in p5
+-- C((fun (x : Nat) -> x) 1)); SHIFT; C(p5); DROP
+-- C((fun (x : Nat) -> x)); C(1); CALL; SHIFT; ACCESS; 0; DROP

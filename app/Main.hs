@@ -36,15 +36,47 @@ import Bytecompile
 
 import Options.Applicative hiding ( Const )
 
-prompt :: String
-prompt = "PCF> "
 
-{-
-main :: IO ()
-main = do args <- getArgs
-          runPCF (runInputT defaultSettings (main' args))
-          return ()
--}
+-- lineas de comandos
+data Mode = Interactive
+          | Typecheck
+          | Bytecompile
+          | Run
+
+
+-- | Parser de banderas
+parseMode :: Parser Mode
+parseMode =
+    flag' Typecheck ( long "typecheck" <> short 't' <> help "Solo chequear tipos")
+    <|> flag' Bytecompile (long "bytecompile" <> short 'c' <> help "Compilar a la BVM")
+    <|> flag' Run (long "run" <> short 'r' <> help "Ejecutar bytecode en la BVM")
+    <|> flag Interactive Interactive ( long "interactive" <> short 'i'
+                                                          <> help "Ejecutar en forma interactiva" )
+
+
+-- | Parser de opciones general, consiste de un modo y una lista de archivos a procesar
+parseArgs :: Parser (Mode, [FilePath])
+parseArgs = (,) <$> parseMode <*> many (argument str (metavar "FILES..."))
+
+
+-- | Parser de programas
+parseIO ::  MonadPCF m => String -> P a -> String -> m a
+parseIO filename p x = case runP p x filename of
+                  Left e  -> throwError (ParseErr e)
+                  Right r -> return r
+
+
+parseFile :: MonadPCF m => FilePath -> m [Decl NSTerm]
+parseFile f = do
+    printPCF ("Abriendo "++f++"...")
+    let filename = reverse(dropWhile isSpace (reverse f))
+    x <- liftIO $ catch (readFile filename)
+               (\e -> do let err = show (e :: IOException)
+                         hPutStr stderr ("No se pudo abrir el archivo " ++ filename ++ ": " ++ err ++"\n")
+                         return "")
+    decls <- parseIO filename program x
+    return decls
+
 
 main :: IO ()
 main = execParser opts >>= go
@@ -53,52 +85,92 @@ main = execParser opts >>= go
                 ( fullDesc
                   <> progDesc "Compilador de PCF"
                   <> header "Compilador de PCF de la materia Compiladores 2020" )
-                
+
+
 go :: (Mode,[FilePath]) -> IO ()
 go (Interactive,files) =
   do runPCF (runInputT defaultSettings (main' files))
      return ()
-go (Typecheck, files) = typeCheckFiles files
-go (Bytecompile, files) = byteCompileFiles files
+go (Typecheck, files) = do runPCF $ catchErrors $ typeCheckFiles files
+                           return ()
+go (Bytecompile, files) = do runPCF $ catchErrors $  byteCompileFiles files
+                             return ()
 go (Run, files) = runFiles files
 
-typeCheckFiles :: [FilePath] -> IO ()  
-typeCheckFiles = undefined
+---------------
+-- TYPECHECKING
+---------------
+typeCheckFiles :: MonadPCF m => [FilePath] -> m ()
+typeCheckFiles (f:fs) = do typeCheckFile f
+                           typeCheckFiles fs
+typeCheckFiles [] = return ()
+
+typeCheckFile :: MonadPCF m => FilePath -> m ()
+typeCheckFile f = do
+  decls <- parseFile f
+  handle decls
+  where handle (dn : ds) = do dn' <- desugarDecl dn
+                              let d = elab_decl dn'
+                              tcDecl d
+                              addDecl d
+                              handle ds
+        handle [] = return ()
 
 --------------
 -- COMPILACION
 --------------
-
-byteCompileFiles :: [FilePath] -> IO ()
-byteCompileFiles (f:fs) = do runPCF (byteCompileFile f)
+byteCompileFiles :: MonadPCF m => [FilePath] -> m ()
+byteCompileFiles (f:fs) = do byteCompileFile f
                              byteCompileFiles fs
 byteCompileFiles [] = return ()
 
 byteCompileFile :: MonadPCF m => FilePath -> m ()
 byteCompileFile f = do
-  printPCF ("Abriendo "++f++"...")
-  let filename = reverse(dropWhile isSpace (reverse f))
-  x <- liftIO $ catch (readFile filename)
-              (\e -> do let err = show (e :: IOException)
-                        hPutStr stderr ("No se pudo abrir el archivo " ++ filename ++ ": " ++ err ++"\n")
-                        return "")
-  decls <- parseIO filename program x
-  decls' <- fun decls
+  decls <- parseFile f
+  decls' <- handle decls
   c <- bytecompileModule decls'
   liftIO $ bcWrite c (f ++ ".byte")
   return ()
+  where handle (dn : ds) = do dn' <- desugarDecl dn
+                              let d = elab_decl dn'
+                              tcDecl d --Si no es necesario hacer chequeo de tipos en el compilador sacar estas dos lineas
+                              addDecl d --
+                              ds' <- handle ds
+                              return (d : ds')
+        handle [] = return []
   
-fun :: MonadPCF m => [Decl NSTerm] -> m [Decl Term]
-fun (d : ds) = do d' <- desugarDecl d
-                  ds' <- fun ds
-                  return ((elab_decl d') : ds')
-fun [] = return []
----------
+
+--------------
+-- RUN
+--------------
 runFiles :: [FilePath] -> IO ()
 runFiles (f:fs) = do b <- bcRead f
                      runPCF (runBC b)
                      runFiles fs
 runFiles [] = return ()
+
+
+--------------
+-- INTERPRETE
+--------------
+data Command = Compile CompileForm
+             | Print String
+             | Type String
+             | Browse
+             | Quit
+             | Help
+             | Noop
+
+
+data CompileForm = CompileInteractive  String
+                 | CompileFile         String
+
+
+data InteractiveCommand = Cmd [String] String (String -> Command) String
+
+
+prompt :: String
+prompt = "PCF> "
 
 
 main' :: (MonadPCF m, MonadMask m) => [String] -> InputT m ()
@@ -119,6 +191,7 @@ main' args = do
                        b <- lift $ catchErrors $ handleCommand c
                        maybe loop (flip when loop) b
  
+
 compileFiles ::  MonadPCF m => [String] -> m ()
 compileFiles []     = return ()
 compileFiles (x:xs) = do
@@ -126,28 +199,139 @@ compileFiles (x:xs) = do
         compileFile x
         compileFiles xs
 
+
 compileFile ::  MonadPCF m => String -> m ()
 compileFile f = do
-    printPCF ("Abriendo "++f++"...")
-    let filename = reverse(dropWhile isSpace (reverse f))
-    x <- liftIO $ catch (readFile filename)
-               (\e -> do let err = show (e :: IOException)
-                         hPutStr stderr ("No se pudo abrir el archivo " ++ filename ++ ": " ++ err ++"\n")
-                         return "")
-    decls <- parseIO filename program x
+    decls <- parseFile f
     mapM_ handleDecl decls
 
-    
-parseIO ::  MonadPCF m => String -> P a -> String -> m a
-parseIO filename p x = case runP p x filename of
-                  Left e  -> throwError (ParseErr e)
-                  Right r -> return r
+
+handleDecl ::  MonadPCF m => Decl NSTerm -> m ()
+handleDecl (DeclType p n ty) = addTy n ty
+handleDecl ndecl = do
+        ndecl' <- desugarDecl ndecl
+        let decl@(Decl p x ty t) = elab_decl ndecl'
+        tcDecl decl
+        te <- runCEK t --te <- eval t 
+        addDecl (Decl p x ty te)
+        
+
+-- | Parser simple de comando interactivos
+interpretCommand :: String -> IO Command
+interpretCommand x
+  =  if isPrefixOf ":" x then
+       do  let  (cmd,t')  =  break isSpace x
+                t         =  dropWhile isSpace t'
+           --  find matching commands
+           let  matching  =  filter (\ (Cmd cs _ _ _) -> any (isPrefixOf cmd) cs) commands
+           case matching of
+             []  ->  do  putStrLn ("Comando desconocido `" ++ cmd ++ "'. Escriba :? para recibir ayuda.")
+                         return Noop
+             [Cmd _ _ f _]
+                 ->  do  return (f t)
+             _   ->  do  putStrLn ("Comando ambigüo, podría ser " ++
+                                   concat (intersperse ", " [ head cs | Cmd cs _ _ _ <- matching ]) ++ ".")
+                         return Noop
+
+     else
+       return (Compile (CompileInteractive x))
 
 
----------------------------------------------------------------------------------------------------------------------------------------
--- Funciones para desucarar
----------------------------------------------------------------------------------------------------------------------------------------
+commands :: [InteractiveCommand]
+commands
+  =  [ Cmd [":browse"]      ""        (const Browse) "Ver los nombres en scope",
+       Cmd [":load"]        "<file>"  (Compile . CompileFile)
+                                                     "Cargar un programa desde un archivo",
+       Cmd [":print"]       "<exp>"   Print          "Imprime un término y sus ASTs sin evaluarlo",
+       Cmd [":type"]        "<exp>"   Type           "Chequea el tipo de una expresión",
+       Cmd [":quit",":Q"]        ""        (const Quit)   "Salir del intérprete",
+       Cmd [":help",":?"]   ""        (const Help)   "Mostrar esta lista de comandos" ]
 
+
+helpTxt :: [InteractiveCommand] -> String
+helpTxt cs
+  =  "Lista de comandos:  Cualquier comando puede ser abreviado a :c donde\n" ++
+     "c es el primer caracter del nombre completo.\n\n" ++
+     "<expr>                  evaluar la expresión\n" ++
+     "let <var> = <expr>      definir una variable\n" ++
+     unlines (map (\ (Cmd c a _ d) ->
+                   let  ct = concat (intersperse ", " (map (++ if null a then "" else " " ++ a) c))
+                   in   ct ++ replicate ((24 - length ct) `max` 2) ' ' ++ d) cs)
+
+
+-- | 'handleCommand' interpreta un comando y devuelve un booleano
+-- indicando si se debe salir del programa o no.
+handleCommand ::  MonadPCF m => Command  -> m Bool
+handleCommand cmd = do
+   s@GlEnv {..} <- get
+   case cmd of
+       Quit   ->  return False
+       Noop   ->  return True
+       Help   ->  printPCF (helpTxt commands) >> return True
+       Browse ->  do  --printPCF (unlines [ s | s <- reverse (nub (map declName glb)) ])
+                      printPCF (unlines [ s | s <- reverse (nub (map (\(n,t) -> n ++ ": " ++ (ppTy t)) tyEnv)) ])
+                      return True
+       Compile c ->
+                  do  case c of
+                          CompileInteractive e -> compilePhrase e
+                          CompileFile f        -> put (s {lfile=f}) >> compileFile f
+                      return True
+       Print e   -> printPhrase e >> return True
+       Type e    -> typeCheckPhrase e >> return True
+
+
+compilePhrase ::  MonadPCF m => String -> m ()
+compilePhrase x =
+  do
+    dot <- parseIO "<interactive>" declOrTm x
+    case dot of 
+      Left d  -> handleDecl d
+      Right t -> handleTerm t
+
+
+handleTerm ::  MonadPCF m => NSTerm -> m ()
+handleTerm t = do
+         t' <- desugarTerm t
+         let tt = elab t'
+         s <- get
+         ty <- tc tt (tyEnv s)
+         te <- runCEK tt -- te <- eval tt
+         printPCF (pp te ++ " : " ++ ppTy ty)
+
+
+printPhrase :: MonadPCF m => String -> m ()
+printPhrase x =
+  do
+    x' <- parseIO "<interactive>" tm x
+    x'' <- desugarTerm x'
+    let  ex = elab x''
+    t  <- case x'' of 
+           (V p f) -> maybe ex id <$> lookupDecl f
+           _       -> return ex  
+    printPCF "NTerm:"
+    printPCF (show x')
+    printPCF "\nTerm:"
+    printPCF (show t)
+
+
+typeCheckPhrase :: MonadPCF m => String -> m ()
+typeCheckPhrase x = do
+         t <- parseIO "<interactive>" tm x
+         t' <- desugarTerm t
+         let tt = elab t'
+         s <- get
+         ty <- tc tt (tyEnv s)
+         printPCF (ppTy ty)
+
+
+runCEK :: MonadPCF m => Term -> m Term
+runCEK t = do val <- seek t [] []
+              return (valToTerm val)
+
+
+----------
+-- DESUGAR
+----------
 typeVariableExpand :: ([Name],Ty) -> Ty -> Ty
 typeVariableExpand (n:ns,xty) tx = typeVariableExpand (ns,xty) (FunTy xty tx) --no hago desugar type por que lo hago en el tipo resultante
 typeVariableExpand ([],xty) tx   = tx
@@ -209,155 +393,4 @@ desugarTy NatTy = return NatTy
 desugarTy (FunTy t1 t2) = do t1' <- desugarTy t1
                              t2' <- desugarTy t2
                              return (FunTy t1 t2)
-
----------------------------------------------------------------------------------------------------------------------------------------
-
-handleDecl ::  MonadPCF m => Decl NSTerm -> m ()
-handleDecl (DeclType p n ty) = addTy n ty
-handleDecl ndecl = do
-        ndecl' <- desugarDecl ndecl
-        let decl@(Decl p x ty t) = elab_decl ndecl'
-        tcDecl decl
-        te <- runCEK t --te <- eval t 
-        addDecl (Decl p x ty te)
-        
-data Command = Compile CompileForm
-             | Print String
-             | Type String
-             | Browse
-             | Quit
-             | Help
-             | Noop
-
-data CompileForm = CompileInteractive  String
-                 | CompileFile         String
-
-data InteractiveCommand = Cmd [String] String (String -> Command) String
-
--- | Parser simple de comando interactivos
-interpretCommand :: String -> IO Command
-interpretCommand x
-  =  if isPrefixOf ":" x then
-       do  let  (cmd,t')  =  break isSpace x
-                t         =  dropWhile isSpace t'
-           --  find matching commands
-           let  matching  =  filter (\ (Cmd cs _ _ _) -> any (isPrefixOf cmd) cs) commands
-           case matching of
-             []  ->  do  putStrLn ("Comando desconocido `" ++ cmd ++ "'. Escriba :? para recibir ayuda.")
-                         return Noop
-             [Cmd _ _ f _]
-                 ->  do  return (f t)
-             _   ->  do  putStrLn ("Comando ambigüo, podría ser " ++
-                                   concat (intersperse ", " [ head cs | Cmd cs _ _ _ <- matching ]) ++ ".")
-                         return Noop
-
-     else
-       return (Compile (CompileInteractive x))
-
-commands :: [InteractiveCommand]
-commands
-  =  [ Cmd [":browse"]      ""        (const Browse) "Ver los nombres en scope",
-       Cmd [":load"]        "<file>"  (Compile . CompileFile)
-                                                     "Cargar un programa desde un archivo",
-       Cmd [":print"]       "<exp>"   Print          "Imprime un término y sus ASTs sin evaluarlo",
-       Cmd [":type"]        "<exp>"   Type           "Chequea el tipo de una expresión",
-       Cmd [":quit",":Q"]        ""        (const Quit)   "Salir del intérprete",
-       Cmd [":help",":?"]   ""        (const Help)   "Mostrar esta lista de comandos" ]
-
-helpTxt :: [InteractiveCommand] -> String
-helpTxt cs
-  =  "Lista de comandos:  Cualquier comando puede ser abreviado a :c donde\n" ++
-     "c es el primer caracter del nombre completo.\n\n" ++
-     "<expr>                  evaluar la expresión\n" ++
-     "let <var> = <expr>      definir una variable\n" ++
-     unlines (map (\ (Cmd c a _ d) ->
-                   let  ct = concat (intersperse ", " (map (++ if null a then "" else " " ++ a) c))
-                   in   ct ++ replicate ((24 - length ct) `max` 2) ' ' ++ d) cs)
-
--- | 'handleCommand' interpreta un comando y devuelve un booleano
--- indicando si se debe salir del programa o no.
-handleCommand ::  MonadPCF m => Command  -> m Bool
-handleCommand cmd = do
-   s@GlEnv {..} <- get
-   case cmd of
-       Quit   ->  return False
-       Noop   ->  return True
-       Help   ->  printPCF (helpTxt commands) >> return True
-       Browse ->  do  --printPCF (unlines [ s | s <- reverse (nub (map declName glb)) ])
-                      printPCF (unlines [ s | s <- reverse (nub (map (\(n,t) -> n ++ ": " ++ (ppTy t)) tyEnv)) ])
-                      return True
-       Compile c ->
-                  do  case c of
-                          CompileInteractive e -> compilePhrase e
-                          CompileFile f        -> put (s {lfile=f}) >> compileFile f
-                      return True
-       Print e   -> printPhrase e >> return True
-       Type e    -> typeCheckPhrase e >> return True
-
-compilePhrase ::  MonadPCF m => String -> m ()
-compilePhrase x =
-  do
-    dot <- parseIO "<interactive>" declOrTm x
-    case dot of 
-      Left d  -> handleDecl d
-      Right t -> handleTerm t
-
-handleTerm ::  MonadPCF m => NSTerm -> m ()
-handleTerm t = do
-         t' <- desugarTerm t
-         let tt = elab t'
-         s <- get
-         ty <- tc tt (tyEnv s)
-         te <- runCEK tt -- te <- eval tt
-         printPCF (pp te ++ " : " ++ ppTy ty)
-
-printPhrase :: MonadPCF m => String -> m ()
-printPhrase x =
-  do
-    x' <- parseIO "<interactive>" tm x
-    x'' <- desugarTerm x'
-    let  ex = elab x''
-    t  <- case x'' of 
-           (V p f) -> maybe ex id <$> lookupDecl f
-           _       -> return ex  
-    printPCF "NTerm:"
-    printPCF (show x')
-    printPCF "\nTerm:"
-    printPCF (show t)
-
-typeCheckPhrase :: MonadPCF m => String -> m ()
-typeCheckPhrase x = do
-         t <- parseIO "<interactive>" tm x
-         t' <- desugarTerm t
-         let tt = elab t'
-         s <- get
-         ty <- tc tt (tyEnv s)
-         printPCF (ppTy ty)
-
-
-runCEK :: MonadPCF m => Term -> m Term
-runCEK t = do val <- seek t [] []
-              return (valToTerm val)
-
--- lineas de comandos
-data Mode = Interactive
-          | Typecheck
-          | Bytecompile
-          | Run
-
--- | Parser de banderas
-parseMode :: Parser Mode
-parseMode =
-    flag' Typecheck ( long "typecheck" <> short 't' <> help "Solo chequear tipos")
-    <|> flag' Bytecompile (long "bytecompile" <> short 'c' <> help "Compilar a la BVM")
-    <|> flag' Run (long "run" <> short 'r' <> help "Ejecutar bytecode en la BVM")
-    <|> flag Interactive Interactive ( long "interactive" <> short 'i'
-                                                          <> help "Ejecutar en forma interactiva" )
-
--- | Parser de opciones general, consiste de un modo y una lista de archivos a procesar
-parseArgs :: Parser (Mode, [FilePath])
-parseArgs = (,) <$> parseMode <*> many (argument str (metavar "FILES..."))
-
-
-
-
+---------
