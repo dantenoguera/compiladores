@@ -8,4 +8,4 @@
 #         else sum (succ m) (pred n)
 # let p6 : Nat = sum 5 6
 
-let p7 : Nat = 1
+# let p7 : Nat = 1

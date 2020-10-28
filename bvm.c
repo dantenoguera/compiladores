@@ -12,19 +12,21 @@
 #define FAST 1
 #define TRACE 0
 
-#define quit(s, ...)							\
-	do {								\
-		fprintf(stderr, s "\n" __VA_OPT__(,) __VA_ARGS__);	\
-		fprintf(stderr, "errno = %d\n", errno);			\
-		exit(1);						\
-	} while (0)
+#define quit(...)                                       \
+    do {                                                \
+        fprintf(stderr, __VA_ARGS__);                   \
+        fprintf(stderr, "\n");                          \
+        fprintf(stderr, "errno = %d\n", errno);         \
+        exit(1);                                        \
+    } while (0)
 
 #if TRACE && !FAST
- #define _trace(s, ...)							\
-	do {								\
-		fprintf(stderr, "TRACE: "s "\n"				\
-					__VA_OPT__(,) __VA_ARGS__);	\
-	} while (0)
+ #define _trace(...)                                    \
+    do {                                                \
+        fprintf(stderr, "TRACE: ");                     \
+        fprintf(stderr, __VA_ARGS__);                   \
+        fprintf(stderr, "\n");                          \
+    } while (0)
 #else
  #define _trace(s, ...)
 #endif
@@ -78,8 +80,8 @@ typedef struct env *env;
  * simplemente un puntero a código, es decir simplemente una etiqueta.
  */
 struct clo {
-	env  clo_env;
-	code clo_body;
+    env  clo_env;
+    code clo_body;
 };
 
 /*
@@ -89,8 +91,8 @@ struct clo {
  * de chequeo en runtime.
  */
 union value {
-	uint32_t i;
-	struct clo clo;
+    uint32_t i;
+    struct clo clo;
 };
 typedef union value value;
 
@@ -100,8 +102,8 @@ typedef union value value;
  * valores, que pueden ser clausuras; y cada clausura tiene un entorno.
  */
 struct env {
-	value v;
-	struct env *next;
+    value v;
+    struct env *next;
 };
 
 /*
@@ -109,10 +111,10 @@ struct env {
  */
 static inline env env_push(env e, value v)
 {
-	env new = malloc(sizeof *new);
-	new->v = v;
-	new->next = e;
-	return new;
+    env new = malloc(sizeof *new);
+    new->v = v;
+    new->next = e;
+    return new;
 }
 
 #if SLOW
@@ -121,245 +123,253 @@ static inline env env_push(env e, value v)
  */
 static int env_len(env e)
 {
-	int rc = 0;
-	while (e) {
-		e = e->next;
-		rc++;
-	}
-	return rc;
+    int rc = 0;
+    while (e) {
+        e = e->next;
+        rc++;
+    }
+    return rc;
 }
 #endif
 
 void run(code init_c)
 {
-	/*
-	 * La pila de valores de la máquina, alocada en memoria dinámica.
-	 * La se agranda si está cerca de llenarse el buffer.
-	 */
-	int stack_size = CHUNK;
-	value *stack = malloc(CHUNK * sizeof stack[0]);
-	if (!stack)
-		quit("OOM stack");
+    /*
+     * La pila de valores de la máquina, alocada en memoria dinámica.
+     * La se agranda si está cerca de llenarse el buffer.
+     */
+    int stack_size = CHUNK;
+    value *stack = malloc(CHUNK * sizeof stack[0]);
+    if (!stack)
+        quit("OOM stack");
 
-	/* El estado de la máquina. Son 3 punteros, empezando con
-	 * el programa inicial, y stack y entornos vacíos. */
-	code c = init_c;
-	value *s = stack;
-	env e = NULL;
+    /* El estado de la máquina. Son 3 punteros, empezando con
+     * el programa inicial, y stack y entornos vacíos. */
+    code c = init_c;
+    value *s = stack;
+    env e = NULL;
 
-	/*
-	 * Usando la stack como un verdadero C Hacker
-	 * ==========================================
-	 *
-	 * El puntero `s` apunta siempre una (1) dirección más adelante
-	 * del último elemento de la stack, o equivalentemente a la primera
-	 * dirección libre. Esto significa que podemos acceder al último
-	 * elemento, en la cima de la stack, con s[-1]. El anteúltimo elemento
-	 * está en s[-2].
-	 *
-	 * Para pushear un valor v a la stack hacemos:
-	 *
-	 *   *s++ = v;
-	 *
-	 * Esto es igual a *s = v; s = s + 1. Simétricamente,
-	 * para sacar un valor de la stack, hacemos:
-	 *
-	 *   v = *--s;
-	 *
-	 * Que es igual a s = s - 1; v = *s
-	 */
+    /*
+     * Usando la stack como un verdadero C Hacker
+     * ==========================================
+     *
+     * El puntero `s` apunta siempre una (1) dirección más adelante
+     * del último elemento de la stack, o equivalentemente a la primera
+     * dirección libre. Esto significa que podemos acceder al último
+     * elemento, en la cima de la stack, con s[-1]. El anteúltimo elemento
+     * está en s[-2].
+     *
+     * Para pushear un valor v a la stack hacemos:
+     *
+     *   *s++ = v;
+     *
+     * Esto es igual a *s = v; s = s + 1. Simétricamente,
+     * para sacar un valor de la stack, hacemos:
+     *
+     *   v = *--s;
+     *
+     * Que es igual a s = s - 1; v = *s
+     */
 
-	while (1) {
-		/*
-		 * Agrandamos la stack si estamos cerca (a 10 elementos) de
-		 * llenarla. Le agregamos otro bloque de CHUNK valores al final.
-		 */
-		if (s - stack > stack_size - 10) {
-			int offset = s - stack;
-			stack_size += CHUNK;
-			value *new = realloc (stack, stack_size * sizeof stack[0]);
-			if (!new)
-				quit("OOM stack grow");
-			stack = new;
-			s = stack + offset;
-		}
+    while (1) {
+        /*
+         * Agrandamos la stack si estamos cerca (a 10 elementos) de
+         * llenarla. Le agregamos otro bloque de CHUNK valores al final.
+         */
+        if (s - stack > stack_size - 10) {
+            int offset = s - stack;
+            stack_size += CHUNK;
+            value *new = realloc (stack, stack_size * sizeof stack[0]);
+            if (!new)
+                quit("OOM stack grow");
+            stack = new;
+            s = stack + offset;
+        }
 
-		/* Tracing: sólo habilitado cuando compilamos
-		 * en modo lento. */
-		if (TRACE && !FAST) {
-			code cc;
-			printf("codes = [");
-			for (cc = c; *cc != STOP; cc++) {
-				printf("%2i ", *cc);
-			}
-			printf(" 10]\n");
-		}
-		_trace("c = %p", (void*)c);
-		_trace("*c = %d", *c);
-		_trace("|s| = %ld", s - stack);
-		_trace("|e| = %d", env_len(e));
+        /* Tracing: sólo habilitado cuando compilamos
+         * en modo lento. */
+        if (TRACE && !FAST) {
+            code cc;
+            printf("codes = [");
+            for (cc = c; *cc != STOP; cc++) {
+                printf("%2i ", *cc);
+            }
+            printf(" 10]\n");
+        }
+        _trace("c = %p", (void*)c);
+        _trace("*c = %d", *c);
+        _trace("|s| = %ld", s - stack);
+        _trace("|e| = %d", env_len(e));
 
-		/* Consumimos un opcode y lo inspeccionamos. A la vez,
-		 * avanzamos el puntero de código. */
-		switch(*c++) {
+        /* Consumimos un opcode y lo inspeccionamos. A la vez,
+         * avanzamos el puntero de código. */
+        switch(*c++) {
 
-		case ACCESS: {
-			/* Acceso a una variable: leemos el entero
-			 * siguiente que representa el índice y recorremos
-			 * el entorno hasta llegar a su binding. */
-			int i = *c++;
-			env ee = e;
-			while (i--)
-				ee = ee->next;
+        case ACCESS: {
+            /* Acceso a una variable: leemos el entero
+             * siguiente que representa el índice y recorremos
+             * el entorno hasta llegar a su binding. */
+            int i = *c++;
+            env ee = e;
+            while (i--)
+                ee = ee->next;
 
-			/* Lo ponemos en la stack */
-			*s++ = ee->v;
-			break;
-		}
+            /* Lo ponemos en la stack */
+            *s++ = ee->v;
+            break;
+        }
 
-		case CONST: {
-			/* Una constante: la leemos y la ponemos en la stack */
-			(*s++).i = *c++;
-			break;
-		}
+        case CONST: {
+            /* Una constante: la leemos y la ponemos en la stack */
+            (*s++).i = *c++;
+            break;
+        }
 
-		case SUCC: {
-			/* Sucesor: ya tenemos el resultado del argumento
-			 * en la stack, le sumamos uno. */
-			s[-1].i++;
-			break;
-		}
+        case SUCC: {
+            /* Sucesor: ya tenemos el resultado del argumento
+             * en la stack, le sumamos uno. */
+            s[-1].i++;
+            break;
+        }
 
-		case PRED: {
-			if (s[-1].i > 0)
-				s[-1].i--;
-			break;
-		}
+        case PRED: {
+            if (s[-1].i > 0)
+                s[-1].i--;
+            break;
+        }
 
-		case RETURN: {
-			/* Return: tenemos en el stack un valor y una dirección,
-			 * y entorno, de retorno. Saltamos a la dirección
-			 * de retorno y a su entorno, pero dejamos el valor
-			 * de retorno en la stack. */
-			value rv = *--s;
+        case RETURN: {
+            /* Return: tenemos en el stack un valor y una dirección,
+             * y entorno, de retorno. Saltamos a la dirección
+             * de retorno y a su entorno, pero dejamos el valor
+             * de retorno en la stack. */
+            value rv = *--s;
 
-			struct clo ret_addr = (*--s).clo;
+            struct clo ret_addr = (*--s).clo;
 
-			e = ret_addr.clo_env;
-			c = ret_addr.clo_body;
+            e = ret_addr.clo_env;
+            c = ret_addr.clo_body;
 
-			*s++ = rv;
-			break;
-		}
+            *s++ = rv;
+            break;
+        }
 
-		case CALL: {
-			/* Aplicación: tenemos en la stack un argumento
-			 * y una función. La función debe ser una clausura.
-			 * La idea es saltar a la clausura extendiendo su
-			 * entorno con el valor de la aplicación, pero
-			 * tenemos que guardar nuestra dirección de retorno.
-			 */
-			value arg = *--s;
-			value fun = *--s;
+        case CALL: {
+            /* Aplicación: tenemos en la stack un argumento
+             * y una función. La función debe ser una clausura.
+             * La idea es saltar a la clausura extendiendo su
+             * entorno con el valor de la aplicación, pero
+             * tenemos que guardar nuestra dirección de retorno.
+             */
+            value arg = *--s;
+            value fun = *--s;
 
-			struct clo ret_addr = { .clo_env = e, .clo_body = c };
-			(*s++).clo = ret_addr;
+            struct clo ret_addr = { .clo_env = e, .clo_body = c };
+            (*s++).clo = ret_addr;
 
-			/* Cambiamos al entorno de la clausura, agregando arg */
-			e = env_push(fun.clo.clo_env, arg);
+            /* Cambiamos al entorno de la clausura, agregando arg */
+            e = env_push(fun.clo.clo_env, arg);
 
-			/* Saltamos! */
-			c = fun.clo.clo_body;
+            /* Saltamos! */
+            c = fun.clo.clo_body;
 
-			break;
-		}
+            break;
+        }
 
-		case IFZ: {
-			_quit("IFZ no implementado");
-			break;
-		}
+        case IFZ: {
+            if((--s)->i == 0)
+                c += 2;
+            break;
+        }
 
-		case JUMP: {
-			int offset = *c++;
-			c += offset;
-			break;
-		}
+        case JUMP: {
+            int offset = *c++;
+            c += offset;
+            break;
+        }
 
-		case FUNCTION: {
-			/* Un lambda, es un valor! Armamos una clausura
-			 * la ponemos en la stack, y listo! */
+        case FUNCTION: {
+            /* Un lambda, es un valor! Armamos una clausura
+             * la ponemos en la stack, y listo! */
 
-			/*
-			 * La parte tramposa es que el cuerpo del lambda
-			 * puede tener cualquier longitud y tenemos que saber
-			 * donde seguir evaluando. Nuestro bytecode
-			 * incluye la longitud del cuerpo del lambda en
-			 * el entero siguiente, así que lo consumimos.
-			 */
-			int leng = *c++;
+            /*
+             * La parte tramposa es que el cuerpo del lambda
+             * puede tener cualquier longitud y tenemos que saber
+             * donde seguir evaluando. Nuestro bytecode
+             * incluye la longitud del cuerpo del lambda en
+             * el entero siguiente, así que lo consumimos.
+             */
+            int leng = *c++;
 
-			/* Ahora sí, armamos la clausura */
-			struct clo clo = {
-				.clo_env = e,
-				.clo_body = c,
-			};
+            /* Ahora sí, armamos la clausura */
+            struct clo clo = {
+                .clo_env = e,
+                .clo_body = c,
+            };
 
-			/* La ponemos en el stack */
-			(*s++).clo = clo;
+            /* La ponemos en el stack */
+            (*s++).clo = clo;
 
-			/* Y saltamos todo el cuerpo del lambda */
-			c += leng;
+            /* Y saltamos todo el cuerpo del lambda */
+            c += leng;
 
-			break;
-		}
+            break;
+        }
 
-		case FIX: {
-			/*
-			 * Fixpoint: algo de magia. Tenemos una clausura en
-			 * el stack, donde su primer variable libre es el
-			 * binding recursivo. La modificamos para que el
-			 * entorno se apunte a sí mismo.
-			 */
-			value clo = *--s;
-			env env_fix;
+        case FIX: {
+            /*
+             * Fixpoint: algo de magia. Tenemos una clausura en
+             * el stack, donde su primer variable libre es el
+             * binding recursivo. La modificamos para que el
+             * entorno se apunte a sí mismo.
+             */
+            value clo = *--s;
+            env env_fix;
 
-			/* Atar el nudo! */
-			env_fix = env_push(e, clo);
-			(clo.clo).clo_env = env_fix;
-			env_fix->v = clo;
+            /* Atar el nudo! */
+            env_fix = env_push(e, clo);
+            (clo.clo).clo_env = env_fix;
+            env_fix->v = clo;
 
-			(*s++) = clo;
+            (*s++) = clo;
 
-			break;
-		}
+            break;
+        }
 
-		case STOP: {
-			/* Chau! */
-			return;
-		}
+        case STOP: {
+            /* Chau! */
+            return;
+        }
 
-		case SHIFT: {
-			value v = *--s;
-			e = env_push(e, v);
-			break;
-		}
+        case SHIFT: {
+            value v = *--s;
+            e = env_push(e, v);
+            break;
+        }
 
-		case DROP: {
-			e = e->next;
-			break;
-		}
+        case DROP: {
+            e = e->next;
+            break;
+        }
 
-		case PRINT: {
-			uint32_t i = s[-1].i;
-			printf("%" PRIu32 "\n", i);
-			break;
-		}
+        case PRINT: {
+            uint32_t i = s[-1].i;
+            printf("%" PRIu32 "\n", i);
+            break;
+        }
 
-		default:
-			quit("FATAL: unhandled op code, %d", *(c-1));
-		}
-	}
+        default:
+            quit("FATAL: unhandled op code, %d", *(c-1));
+        }
+    }
 }
+
+/* [2,5,12,3,0,13]
+[CONST,5,SHIFT,ACCESS,0,DROP]
+let p7 : Nat = 5
+
+let p7 : Nat = 5 in p7
+*/
 
 /*
  * main simplemente llama al intérprete sobre el código que hay en el
@@ -372,28 +382,28 @@ void run(code init_c)
  */
 int main(int argc, char **argv)
 {
-	code codeptr;
-	int fd;
-	struct stat sb;
+    code codeptr;
+    int fd;
+    struct stat sb;
 
-	if (argc < 2)
-		quit("I need a filename");
+    if (argc < 2)
+        quit("I need a filename");
 
-	fd = open(argv[1], O_RDONLY);
-	if (fd < 0)
-		quit("open");
+    fd = open(argv[1], O_RDONLY);
+    if (fd < 0)
+        quit("open");
 
-	/* Para obtener el tamaño del archivo. */
-	if (fstat(fd, &sb) < 0)
-		quit("fstat");
+    /* Para obtener el tamaño del archivo. */
+    if (fstat(fd, &sb) < 0)
+        quit("fstat");
 
-	/* Mapeamos el archivo */
-	codeptr = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-	if (!codeptr)
-		quit("mmap");
+    /* Mapeamos el archivo */
+    codeptr = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (!codeptr)
+        quit("mmap");
 
-	/* Llamamos a la máquina */
-	run(codeptr);
-
-	return 0;
+    /* Llamamos a la máquina */
+    run(codeptr);
+    
+    return 0;
 }
