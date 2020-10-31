@@ -43,6 +43,9 @@ data Const = CNat Int
 data UnaryOp = Succ | Pred
   deriving Show
 
+data BinaryOp = Sum | Sub
+  deriving Show
+
 -- | tipo de datos de declaraciones, parametrizado por el tipo del cuerpo de la declaración
 data Decl a =
   Decl { declPos :: Pos, declName :: Name, declType :: Ty, declBody :: a } --Modificamos poniendo el tipo por que ya no se aceptan declaraciones sin tipo
@@ -62,6 +65,7 @@ data Tm info var =
   | Lam info Name Ty (Tm info var)
   | App info (Tm info var) (Tm info var)
   | UnaryOp info UnaryOp (Tm info var)
+  | BinaryOp info BinaryOp (Tm info var) (Tm info var)
   | Fix info Name Ty Name Ty (Tm info var)
   | IfZ info (Tm info var) (Tm info var) (Tm info var)
   | Let info Name Ty (Tm info var) (Tm info var)
@@ -79,6 +83,7 @@ data STm info var =
   | SLetf info Name [([Name], Ty)] Ty (STm info var) (STm info var)
   | SLetRec info Name [([Name], Ty)] Ty (STm info var) (STm info var)
   | SUnaryOpFree info UnaryOp
+  | SBinaryOp info BinaryOp
   deriving (Show, Functor)
 
 type NTerm = Tm Pos Name   -- ^ 'Tm' tiene 'Name's como variables ligadas y libres, guarda posición

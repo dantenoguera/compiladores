@@ -67,6 +67,8 @@ pattern JUMP     = 11
 pattern SHIFT    = 12
 pattern DROP     = 13
 pattern PRINT    = 14
+pattern SUM      = 15
+pattern SUB      = 16
 
 
 bc :: MonadPCF m => Term -> m Bytecode
@@ -90,7 +92,12 @@ bc (IfZ _ c t1 t2) = do c' <- bc c
 bc (Let _ _ _ t1 t2) = do t1' <- bc t1
                           t2' <- bc t2
                           return (t1' ++ [SHIFT] ++ t2' ++ [DROP])
-
+bc (BinaryOp _ op t1 t2) = do  t1' <- bc t1
+                               t2' <- bc t2
+                               return (t2'++t1'++[f op])
+                               where f Sum = SUM
+                                     f Sub = SUB
+                          
 
 nestDecl :: Module -> Term
 nestDecl [(Decl p n ty b)] = close n (Let p n ty b (V NoPos (Free n)))
@@ -131,6 +138,11 @@ runBC' (PRED:xs) e ((I n):s) = case n of
                                 0 -> runBC' xs e ((I 0):s)
                                 x -> runBC' xs e ((I (x-1)):s)
 runBC' (PRED:_) _ _ = error "Error PRED"
+runBC' (SUM:xs) e ((I m):(I n):s) = runBC' xs e ((I (m + n)):s)
+runBC' (SUM:_) _ _ = error "Error SUM"
+runBC' (SUB:xs) e ((I m):(I n):s) = if (m>n) then runBC' xs e ((I (m - n)):s) else runBC' xs e ((I 0):s)
+runBC' (SUB:_) _ _ = error "Error SUB"
+
 runBC' (FIX:xs) e ((Fun e' bc):s) = runBC' xs e ((Fun ((Fun efix bc):e) bc):s)
                                     where efix = (Fun efix bc):e
 runBC' (IFZ:xs) e ((I c):s) = case c of

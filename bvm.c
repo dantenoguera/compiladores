@@ -57,7 +57,9 @@
 #define SHIFT    12
 #define DROP     13
 #define PRINT    14
-#define ADD      20
+#define SUM      15
+#define SUB      16
+
 
 #define CHUNK 4096
 
@@ -356,6 +358,19 @@ void run(code init_c)
             uint32_t i = s[-1].i;
             printf("%" PRIu32 "\n", i);
             break;
+        }
+
+        case SUM: {
+            s[-2].i += s[-1].i;
+            s--;
+            break;
+        }
+
+        case SUB: {
+            if (s[-1].i>s[-2].i) s[-2].i = s[-1].i - s[-2].i;
+            else s[-2].i = 0;
+            s--;
+            break;   
         }
 
         default:

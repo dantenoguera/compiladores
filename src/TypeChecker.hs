@@ -64,8 +64,12 @@ tc (Let i n ty t1 t2) bs = do
   (dom, cod) <- domCod (Lam i n ty t2) (FunTy ty ty2)
   expect dom ty1 t1
   return cod
+tc (BinaryOp p op t1 t2) bs = do 
+  t1y <- tc t1 bs
+  expect NatTy t1y t1
+  t2y <- tc t2 bs
+  expect NatTy t2y t2
 
-         
 
 -- | @'typeError' t s@ lanza un error de tipo para el término @t@ 
 typeError :: MonadPCF m => Term   -- ^ término que se está chequeando  

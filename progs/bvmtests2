@@ -1,5 +1,5 @@
-let rec sum (m n : Nat) : Nat =
-    ifz n then m
-        else sum (succ m) (pred n)
-let p : Nat = sum 5 6
-
+# let rec sum (m n : Nat) : Nat =
+#     ifz n then m
+#         else sum (succ m) (pred n)
+# let p : Nat = sum 5 6
+let p : Nat = 1+2+3+4+5-1-2-3-4-5 - 10000000

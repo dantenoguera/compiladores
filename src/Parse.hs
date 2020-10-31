@@ -31,7 +31,7 @@ lexer = Tok.makeTokenParser $
          reservedNames = ["let", "fun", "fix", "then", "else", 
                           "succ", "pred", "ifz", "Nat", "rec", 
                           "type", "in", "rec"],
-         reservedOpNames = ["->",":","="]
+         reservedOpNames = ["->",":","=", "+", "-"]
         }
 
 whiteSpace :: P ()
@@ -104,12 +104,23 @@ unaryOpFree = do
   o <- unaryOpName
   return (SUnaryOpFree i o)
 
+binaryOpName :: P BinaryOp
+binaryOpName =
+      (reservedOp "+" >> return Sum)
+  <|> (reservedOp "-" >> return Sub)
 
+binaryOp :: P NSTerm
+binaryOp = do
+  i <- getPos
+  op <- binaryOpName
+  return (SBinaryOp i op)
+  
 atom :: P NSTerm
 atom =     (flip SConst <$> const <*> getPos)
        <|> flip SV <$> var <*> getPos
        <|> parens tm
        <|> unaryOpFree
+       <|> binaryOp
 
 binding :: P ([Name], Ty)
 binding = parens $ do vars <- many1 var

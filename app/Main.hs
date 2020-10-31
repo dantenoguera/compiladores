@@ -355,7 +355,10 @@ desugarTerm :: MonadPCF m => NSTerm -> m NTerm
 desugarTerm (SV p v) = return (V p v)
 desugarTerm (SConst p c) = return (Const p c)
 desugarTerm (SApp p (SUnaryOpFree _ op) t2) = do t2' <- desugarTerm t2
-                                                 return (UnaryOp p op t2') --ojo con que p ponemos
+                                                 return (UnaryOp p op t2')
+desugarTerm (SApp _ (SApp p t1 (SBinaryOp _ op)) t2) = do t1' <- desugarTerm t1
+                                                          t2' <- desugarTerm t2
+                                                          return (BinaryOp p op t1' t2')
 desugarTerm (SApp p t1 t2) = do t1' <- desugarTerm t1
                                 t2' <- desugarTerm t2
                                 return (App p t1' t2')
