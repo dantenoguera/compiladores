@@ -69,8 +69,9 @@ pattern DROP     = 13
 pattern PRINT    = 14
 pattern SUM      = 15
 pattern SUB      = 16
+pattern TAILCALL = 17
 
-
+{- NO SOPORTA RECURSION DE COLA
 bc :: MonadPCF m => Term -> m Bytecode
 bc (V _ (Bound i)) = return [ACCESS, i]
 bc (Const _ (CNat c)) = return [CONST, c]
@@ -97,7 +98,48 @@ bc (BinaryOp _ op t1 t2) = do  t1' <- bc t1
                                return (t2'++t1'++[f op])
                                where f Sum = SUM
                                      f Sub = SUB
-                          
+-}
+
+bc :: MonadPCF m => Term -> m Bytecode
+bc (V _ (Bound i)) = return [ACCESS, i]
+bc (Const _ (CNat c)) = return [CONST, c]
+bc (Lam _ _ _ t) = do t' <- bct t
+                      return ([FUNCTION, length t' + 1] ++ t' ++ [RETURN])
+bc (App _ t1 t2) =  do t1' <- bc t1
+                       t2' <- bc t2
+                       return (t1'++ t2'++ [CALL])
+bc (UnaryOp _ Succ t) = do t' <- bc t
+                           return (t' ++ [SUCC])
+bc (UnaryOp _ Pred t) = do t' <- bc t
+                           return (t' ++ [PRED])
+bc (Fix _ _ _ _ _ t) = do t' <- bc t
+                          return ([FUNCTION, length t' + 1] ++ t' ++ [RETURN, FIX])
+bc (IfZ _ c t1 t2) = do c' <- bc c
+                        t1' <- bc t1
+                        t2' <- bc t2
+                        return (c' ++ [IFZ] ++ [JUMP, length t1' + 2] ++ t1' ++ [JUMP, length t2'] ++ t2')
+bc (Let _ _ _ t1 t2) = do t1' <- bc t1
+                          t2' <- bc t2
+                          return (t1' ++ [SHIFT] ++ t2' ++ [DROP])
+bc (BinaryOp _ op t1 t2) = do  t1' <- bc t1
+                               t2' <- bc t2
+                               return (t2'++t1'++[f op])
+                               where f Sum = SUM
+                                     f Sub = SUB
+
+bct :: MonadPCF m => Term -> m Bytecode
+bct (App _ t1 t2) = do t1' <- bc t1
+                       t2' <- bc t2
+                       return (t1'++ t2'++ [TAILCALL])
+bct (IfZ _ c t1 t2) = do c' <- bc c
+                         t1' <- bct t1
+                         t2' <- bct t2
+                         return (c' ++ [IFZ, JUMP, length t1'] ++ t1' ++ t2')
+bct (Let _ _ _ t1 t2) = do t1' <- bc t1
+                           t2' <- bct t2
+                           return (t1' ++ [SHIFT] ++ t2')
+bct t = do t' <- bc t
+           return (t'++[RETURN])
 
 nestDecl :: Module -> Term
 nestDecl [(Decl p n ty b)] = close n (Let p n ty b (V NoPos (Free n)))
@@ -132,6 +174,8 @@ runBC' (RETURN:_) _ (v:(RA e bc):s) = runBC' bc e (v:s)
 runBC' (RETURN:_) _ _ = error "Error RETURN"
 runBC' (CALL:xs) e (v:(Fun ef bc):s) = runBC' bc (v:ef) ((RA e xs):s)
 runBC' (CALL:_) _ _ = error "Error CALL"
+runBC' (TAILCALL:xs) e (v:(Fun ef bc):s) = runBC' bc (v:ef) s
+runBC' (TAILCALL:_) _ _ = error "Error TAILCALL"
 runBC' (SUCC:xs) e ((I n):s) = runBC' xs e ((I (n+1)):s)
 runBC' (SUCC:_) _ _ = error "Error SUCC"
 runBC' (PRED:xs) e ((I n):s) = case n of

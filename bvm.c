@@ -9,7 +9,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 
-#define FAST 1
+#define FAST 0
 #define TRACE 0
 
 #define quit(...)                                       \
@@ -59,6 +59,12 @@
 #define PRINT    14
 #define SUM      15
 #define SUB      16
+#define TAILCALL 17
+
+
+//[ FUNCTION 11  CONST   1 JUMP  3  CONST  0  RETURN  CONST  1  RETURN  RETURN  CONST  1  CALL SHIFT  ACCESS  0 DROP PRINT  STOP]
+//[ 4 11  2  1 11  3  2  0  1  2  1  1  1  2  1  5 12  3  0 13 14  10]
+//(fun (x : Nat) -> ifz 1 then 0 else 1) 1
 
 
 #define CHUNK 4096
@@ -371,6 +377,16 @@ void run(code init_c)
             else s[-2].i = 0;
             s--;
             break;   
+        }
+
+        case TAILCALL: {
+            value arg = *--s;
+            value fun = *--s;
+            
+            e = env_push(fun.clo.clo_env, arg);
+            c = fun.clo.clo_body;
+
+            break;
         }
 
         default:
