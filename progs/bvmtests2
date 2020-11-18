@@ -2,4 +2,3 @@ let rec sum (m n : Nat) : Nat =
     ifz n then m
         else sum (succ m) (pred n)
 let p : Nat = sum 0 1000000
-# let p : Nat = (fun (x : Nat) -> ifz 1 then 0 else 1) 1

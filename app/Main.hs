@@ -42,6 +42,7 @@ data Mode = Interactive
           | Typecheck
           | Bytecompile
           | Run
+          | ClosureConvert
 
 
 -- | Parser de banderas
@@ -52,6 +53,7 @@ parseMode =
     <|> flag' Run (long "run" <> short 'r' <> help "Ejecutar bytecode en la BVM")
     <|> flag Interactive Interactive ( long "interactive" <> short 'i'
                                                           <> help "Ejecutar en forma interactiva" )
+    <|> flag ClosureConvert (long "closureconvert" <> short "cc" <> help "Aplicar conversion de clausuras y hosting") --ver si deberiamos usar f'
 
 
 -- | Parser de opciones general, consiste de un modo y una lista de archivos a procesar
@@ -96,6 +98,19 @@ go (Typecheck, files) = do runPCF $ catchErrors $ typeCheckFiles files
 go (Bytecompile, files) = do runPCF $ catchErrors $  byteCompileFiles files
                              return ()
 go (Run, files) = runFiles files
+go (ClosureConvert, files) = do runPCF $ catchErrors $ closureConvertFiles files
+                                return ()
+
+------------------
+-- CLOSURE CONVERT
+------------------
+closureConvertFiles :: MonadPCF m => [FilesPath] -> m()
+closureConvertFiles (f : fs) = do closureConvertFile f
+                                  closureConvertFiles fs
+closureConvertFiles [] = return ()
+
+closureConvertFile :: MonadPCF m => FilePath -> m ()
+closureConvertFile f = undefined
 
 ---------------
 -- TYPECHECKING

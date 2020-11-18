@@ -5,8 +5,8 @@ let rec sum (m n : Nat) : Nat =
 let p : Nat = sum 0 1000000
 
 # Comando
-valgrind --tool=massif --pages-as-heap=yes ./bvm progs/bvmtest2.byte
-ms_print <pid>
+valgrind --tool=massif --pages-as-heap=yes ./bvm <path> 
+ms_print massif.out.<pid>
 
 # Salida (Sin Tail Recursion)
 
@@ -85,11 +85,6 @@ ms_print arguments: massif.out.102193
 --------------------------------------------------------------------------------
   n        time(i)         total(B)   useful-heap(B) extra-heap(B)    stacks(B)
 --------------------------------------------------------------------------------
- 89    851,966,841       61,870,080       61,870,080             0            0
- 90    867,760,702       62,918,656       62,918,656             0            0
- 91    883,554,655       63,967,232       63,967,232             0            0
- 92    899,348,516       65,015,808       65,015,808             0            0
- 93    915,142,469       66,064,384       66,064,384             0            0
  94    930,936,330       67,112,960       67,112,960             0            0
  95    946,730,283       68,161,536       68,161,536             0            0
  96    962,524,144       69,210,112       69,210,112             0            0

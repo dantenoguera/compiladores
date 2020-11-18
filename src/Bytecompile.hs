@@ -104,7 +104,7 @@ bc :: MonadPCF m => Term -> m Bytecode
 bc (V _ (Bound i)) = return [ACCESS, i]
 bc (Const _ (CNat c)) = return [CONST, c]
 bc (Lam _ _ _ t) = do t' <- bct t
-                      return ([FUNCTION, length t' + 1] ++ t' ++ [RETURN])
+                      return ([FUNCTION, length t'] ++ t' ++ [RETURN])
 bc (App _ t1 t2) =  do t1' <- bc t1
                        t2' <- bc t2
                        return (t1'++ t2'++ [CALL])
@@ -125,7 +125,7 @@ bc (BinaryOp _ op t1 t2) = do  t1' <- bc t1
                                t2' <- bc t2
                                return (t2'++t1'++[f op])
                                where f Sum = SUM
-                                     f Sub = SUB
+                                     f Sub =  SUB
 
 bct :: MonadPCF m => Term -> m Bytecode
 bct (App _ t1 t2) = do t1' <- bc t1

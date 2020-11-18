@@ -48,7 +48,7 @@ data BinaryOp = Sum | Sub
 
 -- | tipo de datos de declaraciones, parametrizado por el tipo del cuerpo de la declaración
 data Decl a =
-  Decl { declPos :: Pos, declName :: Name, declType :: Ty, declBody :: a } --Modificamos poniendo el tipo por que ya no se aceptan declaraciones sin tipo
+    Decl { declPos :: Pos, declName :: Name, declType :: Ty, declBody :: a } --Modificamos poniendo el tipo por que ya no se aceptan declaraciones sin tipo
   | DeclLetf { declPos :: Pos, declName :: Name, declArgs :: [([Name], Ty)] ,declType :: Ty, declBody :: a }
   | DeclLetRec { declPos :: Pos, declName :: Name, declArgs :: [([Name], Ty)] ,declType :: Ty, declBody :: a }
   | DeclType { declPos :: Pos, declName :: Name, declType :: Ty }
@@ -87,7 +87,7 @@ data STm info var =
   deriving (Show, Functor)
 
 type NTerm = Tm Pos Name   -- ^ 'Tm' tiene 'Name's como variables ligadas y libres, guarda posición
-type Term = Tm Pos Var     -- ^ 'Tm' con índices de De Bruijn como variables ligadas, different type of variables, guarda posición
+type Term = Tm Pos Var     -- ^ 'Tm' con índices de De Bruijn como variables ligadas, guarda posición
 
 type NSTerm = STm Pos Name -- Sinónimo de terminos azucarados
 
