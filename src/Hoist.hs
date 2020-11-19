@@ -38,14 +38,21 @@ closureConvert :: Term -> StateT Int (Writer [IrDecl]) Ir
 closureConvert (V _ (Free n)) = return (IrVar n)
 closureConvert (Const _ c) = return (IrConst c)
 closureConvert (Lam _ x _ t) = do s <- get
-                                  put (s + 2)
-                                  t'' <- closureConvert (open x t)
-                                  lift $ tell (IrFun f 2 ["__clo", x'] t'') -- ver clo!!!
-                                  let f = ("__" ++ (show s))
-                                  let x'= ("__"++x ++ (show (s + 1))--cual viene primero, el nombre de funcion o la variable x? (para el indice del state)
-                                  return (MkClosure f [IrVar x']) 
-closureConvert (App _ t1 t2) = do (MkClosure name _) <- closureConvert t1 --ilegal?
+                                  modify (+3)
+                                  let x' = "__"++ x ++ show(s)
+                                  let f  = "__" ++ show (s + 1)
+                                  let clo = "__clo" ++ show (s + 2)
+                                  t' <- closureConvert (open x t)
+                                  lift $ tell (IrFun f 2 [clo, x'] (mkIr t' clo freeVars 1))
+                                  return (MkClosure f freeVars)
+                                  where mkIr t clo (v : vs) i = IrLet v (IrAccess (IrVar clo) i) (mkIr t clo vs (i + 1))
+                                        mkIr t clo [] i = t
+                                        freeVars = -- ???
+closureConvert (App _ t1 t2) = do s <- get
+                                  modify (+1)
+                                  t1' <- closureConvert t1
                                   t2' <- closureConvert t2
+                                  let name = "__clo" ++ (show s)
                                   return (IrLet name t1' ((IrCall (IrAccess (IrVar name) 0) [IrVar name, t2'])))
 closureConvert (UnaryOp _ op t) = do t' <- closureConvert t
                                      return (IrUnaryOp op t')
@@ -57,13 +64,17 @@ closureConvert (Ifz _ c t1 t2) = do c' <- closureConvert c
                                     t1' <- closureConvert t1
                                     t2' <- closureConvert t2
                                     return (IrIfZ c' t1' t2')
-closureConvert (Let _ n _ t1 t2) = -- ???
+closureConvert (Let _ n _ t1 t2) = do t1' <- closureConvert t1
+                                      t2' <- closureConvert t2
+                                      return (IrLet n t1' t2') -- cambiar n?
 
 
 {- Decl { declPos :: Pos, declName :: Name, declType :: Ty, declBody :: a } -} 
 runCC :: [Decl Term] -> [IrDecl]
-runCC = undefined
-
+runCC ((Decl _ n _ t):ds) = let (a, s) = runStateT 0 (closureConvert t)
+                                (ir, irDecls) = runWriter a
+                            in ((IrVal n ir) : irDecls) ++ (runCC ds)
+runCC [] = []
 
 
 $ cat test.pcf 
