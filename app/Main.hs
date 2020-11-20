@@ -33,6 +33,7 @@ import MonadPCF
 import TypeChecker ( tc, tcDecl )
 import CEK ( seek, destroy, valToTerm )
 import Bytecompile
+import Hoist ( runCC )
 
 import Options.Applicative hiding ( Const )
 
@@ -53,7 +54,7 @@ parseMode =
     <|> flag' Run (long "run" <> short 'r' <> help "Ejecutar bytecode en la BVM")
     <|> flag Interactive Interactive ( long "interactive" <> short 'i'
                                                           <> help "Ejecutar en forma interactiva" )
-    <|> flag ClosureConvert (long "closureconvert" <> short "cc" <> help "Aplicar conversion de clausuras y hosting") --ver si deberiamos usar f'
+    <|> flag' ClosureConvert (long "closureconvert" <> short 'a' <> help "Aplicar conversion de clausuras y hosting") --ver si deberiamos usar f'
 
 
 -- | Parser de opciones general, consiste de un modo y una lista de archivos a procesar
@@ -104,13 +105,27 @@ go (ClosureConvert, files) = do runPCF $ catchErrors $ closureConvertFiles files
 ------------------
 -- CLOSURE CONVERT
 ------------------
-closureConvertFiles :: MonadPCF m => [FilesPath] -> m()
+closureConvertFiles :: MonadPCF m => [FilePath] -> m()
 closureConvertFiles (f : fs) = do closureConvertFile f
                                   closureConvertFiles fs
 closureConvertFiles [] = return ()
 
 closureConvertFile :: MonadPCF m => FilePath -> m ()
-closureConvertFile f = undefined
+closureConvertFile f = do decls <- parseFile f
+                          decls' <- handle decls
+                          -- [printPCF ((show decl) ++ "\n") | decl <- runCC decls']
+                          print (runCC decls')
+                          where handle (dn : ds) = do dn' <- desugarDecl dn
+                                                      let d = elab_decl dn'
+                                                      tcDecl d
+                                                      ds' <- handle ds
+                                                      return (d : ds')
+                                handle [] = return []
+                                print (d : ds) = do printPCF ((show d) ++ "\n")
+                                                    print ds
+                                print [] = return () 
+
+                                                      
 
 ---------------
 -- TYPECHECKING

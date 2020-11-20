@@ -113,6 +113,7 @@ freeVars (V _ _)           = []
 freeVars (Lam _ _ _ t)     = freeVars t
 freeVars (App _ l r)       = freeVars l ++ freeVars r
 freeVars (UnaryOp _ _ t)   = freeVars t
+freeVars (BinaryOp _ _ t1 t2) = (freeVars t1) ++ (freeVars t2)
 freeVars (Fix _ _ _ _ _ t) = freeVars t
 freeVars (IfZ _ c t e)     = freeVars c ++ freeVars t ++ freeVars e
 freeVars (Const _ _)       = []
