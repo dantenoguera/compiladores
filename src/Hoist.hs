@@ -21,20 +21,6 @@ data Ir = IrVar Name
         deriving Show
 
 
-{-
-data Tm info var = 
-    V info var
-  | Const info Const
-  | Lam info Name Ty (Tm info var)
-  | App info (Tm info var) (Tm info var)
-  | UnaryOp info UnaryOp (Tm info var)
-  | BinaryOp info BinaryOp (Tm info var) (Tm info var)
-  | Fix info Name Ty Name Ty (Tm info var)
-  | IfZ info (Tm info var) (Tm info var) (Tm info var)
-  | Let info Name Ty (Tm info var) (Tm info var)
-  deriving (Show, Functor)
--}
-
 fresh :: Monad m => String -> StateT Int m Name
 fresh n = do s <- get
              modify (+1)
@@ -45,19 +31,15 @@ mkIr t clo vs = go t clo vs 1
         where go t clo (v : vs) i = IrLet v (IrAccess (IrVar clo) i) (go t clo vs (i + 1))
               go t _ [] _ = t
 
-
 closureConvert :: Term -> StateT Int (Writer [IrDecl]) Ir
 closureConvert (V _ (Free n)) = return (IrVar n)
 closureConvert (Const _ c) = return (IrConst c)
 closureConvert (Lam _ x _ t) = do x' <- fresh x
                                   f <- fresh ""
                                   clo <- fresh "clo"
-                                  let t' = (open x' t)
-                                      fvars = filter (\v -> isPrefixOf "__" v) (freeVars t')
-                                      --where auxfilter '_':('_':n) =
-                                      --      auxfilter v 
-                                  t'' <- closureConvert t'
-                                  lift $ tell [(IrFun f [clo, x'] (mkIr t'' clo fvars))]
+                                  let fvars = filter (\v -> isPrefixOf "__" v) (freeVars t)
+                                  t' <- closureConvert (open x' t)
+                                  lift $ tell [(IrFun f [clo, x'] (mkIr t' clo fvars))]
                                   return (MkClosure f (map (\name -> IrVar name) fvars))
 closureConvert (App _ t1 t2) = do t1' <- closureConvert t1
                                   t2' <- closureConvert t2
@@ -68,13 +50,13 @@ closureConvert (UnaryOp _ op t) = do t' <- closureConvert t
 closureConvert (BinaryOp _ op t1 t2) = do t1' <- closureConvert t1
                                           t2' <- closureConvert t2
                                           return (IrBinaryOp op t1' t2')
-closureConvert (Fix _ f _ x _ t) = do f' <- fresh f
+closureConvert (Fix _ f _ x _ t) = do f' <- fresh ""
                                       x' <- fresh x
-                                      let t' = (openN [f',x'] t)
-                                          fvars = filter (\v -> isPrefixOf "__" v) (freeVars t')
-                                      t'' <- closureConvert t'
                                       clo <- fresh "clo"
-                                      lift $ tell [IrFun f' [clo, x'] (mkIr t'' clo (f': fvars))]
+                                      r <- fresh f 
+                                      let fvars = filter (\v -> isPrefixOf "__" v) (freeVars t)
+                                      t' <- closureConvert (openN [r, x'] t)
+                                      lift $ tell [IrFun f' [clo, x'] (mkIr t' clo (r : fvars))]
                                       return (MkClosure f' (map (\name -> IrVar name) fvars))
 closureConvert (IfZ _ c t1 t2) = do c' <- closureConvert c
                                     t1' <- closureConvert t1
@@ -85,12 +67,12 @@ closureConvert (Let _ n _ t1 t2) = do n' <- fresh n
                                       t2' <- closureConvert (open n' t2)
                                       return (IrLet n' t1' t2') -- por que se cambia el n?
 
-
-{- Decl { declPos :: Pos, declName :: Name, declType :: Ty, declBody :: a } -} 
 runCC :: [Decl Term] -> [IrDecl]
-runCC ((Decl _ n _ t):ds) = let ((ir, _), irDecls) = runWriter (runStateT (closureConvert t) 0)
-                            in ((IrVal n ir) : irDecls) ++ (runCC ds)
-runCC [] = []
+runCC ds = go ds 0
+           where go ((Decl _ name _ t) : xs) n = let ((ir, s), irDecls) = runWriter (runStateT (closureConvert t) n)
+                                                in (irDecls ++ [(IrVal name ir)]) ++ (go xs s)
+                 go [] s = []
+
 
 {-
 $ cat test.pcf 
@@ -119,5 +101,17 @@ IrVal {irDeclName = "suma", irDeclDef = MkClosure "__3" []}
 IrVal {irDeclName = "suma5", irDeclDef = IrCall (IrAccess (IrVar "suma") 0) [IrVar "suma",IrConst (CNat 5)]}
 IrFun {irDeclName = "__10", irDeclArity = 2, irDeclArgNames = ["__clo14","__n12"], irDeclBody = IrLet "__countdown11" (IrVar "__clo14") (IrIfZ (IrVar "__n12") (IrConst (CNat 0)) (IrCall (IrAccess (IrVar "__countdown11") 0) [IrVar "__countdown11",IrBinaryOp Sub (IrVar "__n12") (IrConst (CNat 1))]))}
 IrVal {irDeclName = "countdown", irDeclDef = MkClosure "__10" []}
+-}
 
+{-
+IrVal {irDeclName = "x", irDeclDef = IrConst (CNat 1)}
+IrVal {irDeclName = "y", irDeclDef = IrBinaryOp Sum (IrConst (CNat 2)) (IrVar "x")}
+IrFun {irDeclName = "__1", irDeclArgNames = ["__clo2","__y0"], irDeclBody = IrBinaryOp Sum (IrConst (CNat 1)) (IrVar "x")}
+IrVal {irDeclName = "f", irDeclDef = MkClosure "__1" []}
+IrFun {irDeclName = "__7", irDeclArgNames = ["__clo8","__y6"], irDeclBody = IrLet "__x3" (IrAccess (IrVar "__clo8") 1) (IrBinaryOp Sum (IrVar "__x3") (IrVar "__y6"))}
+IrFun {irDeclName = "__4", irDeclArgNames = ["__clo5","__x3"], irDeclBody = MkClosure "__7" [IrVar "__x3"]}
+IrVal {irDeclName = "suma", irDeclDef = MkClosure "__4" []}
+IrVal {irDeclName = "suma5", irDeclDef = IrLet "__clo9" (IrVar "suma") (IrCall (IrAccess (IrVar "__clo9") 0) [IrVar "__clo9",IrConst (CNat 5)])}
+IrFun {irDeclName = "__10", irDeclArgNames = ["__clo12","__n11"], irDeclBody = IrLet "__countdown13" (IrAccess (IrVar "__clo12") 1) (IrIfZ (IrVar "__n11") (IrConst (CNat 0)) (IrLet "__clo14" (IrVar "__countdown13") (IrCall (IrAccess (IrVar "__clo14") 0) [IrVar "__clo14",IrBinaryOp Sub (IrVar "__n11") (IrConst (CNat 1))])))}
+IrVal {irDeclName = "countdown", irDeclDef = MkClosure "__10" []}
 -}

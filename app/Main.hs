@@ -121,7 +121,7 @@ closureConvertFile f = do decls <- parseFile f
                                                       ds' <- handle ds
                                                       return (d : ds')
                                 handle [] = return []
-                                print (d : ds) = do printPCF ((show d) ++ "\n")
+                                print (d : ds) = do printPCF (show d)
                                                     print ds
                                 print [] = return () 
 
