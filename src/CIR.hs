@@ -1,7 +1,12 @@
+{-# LANGUAGE BlockArguments #-}
 module CIR where
 
-import Lang ( BinaryOp, Name, UnaryOp )
+import Lang ( BinaryOp, Name, UnaryOp, Const(..) )
 import Data.List (intercalate)
+import Hoist ( Ir(..), IrDecl(..) )
+import Control.Monad.State
+import Control.Monad.Writer
+
 
 newtype Reg = Temp String
   deriving Show
@@ -42,6 +47,147 @@ type Blocks = [BasicBlock]
 type CanonFun = (String, [String], [BasicBlock])
 type CanonVal = String -- Sólo el nombre, tipo puntero siempre
 newtype CanonProg = CanonProg [Either CanonFun CanonVal]
+
+
+--data IrDecl = IrVal {irDeclName :: Name, irDeclDef :: Ir}
+--            | IrFun {irDeclName :: Name, irDeclArgNames :: [Name], irDeclBody :: Ir}
+{-
+data Ir = IrVar Name
+        | IrCall Ir [Ir]
+        | IrConst Const
+        | IrUnaryOp UnaryOp Ir
+        | IrBinaryOp BinaryOp Ir Ir
+        | IrLet Name Ir Ir
+        | IrIfZ Ir Ir Ir
+        | MkClosure Name [Ir]
+        | IrAccess Ir Int
+        deriving Show
+-}
+
+
+
+runCanon ds = let (pcfmainBody, prog) = go ds 0
+              in CanonProg ((Left ("pcfmain", [], pcfmainBody)): prog)
+              where go (d : ds) n = case d of
+                                      IrVal name def -> let ((def', s), blocks) = runWriter (runStateT (blocksConvert def) n)
+                                                        let (pcfmainBody, prog) = go ds s
+                                                        in ((Store name def') : pcfmainBody, (Right name) : prog)
+                                      IrFun name args body -> let ((_, s), blocks) = runWriter (runStateT (blocksConvert body) n)
+                                                              let (pcfmainBody, prog) = go ds s
+                                                              in (pcfmainBody, (Left (name, args, blocks)) : prog)
+                    go [] _ = ([], [])
+
+
+
+freshRegisterName :: Monad m => StateT Int m String
+freshRegisterName = do s <- get
+                       modify (+1)
+                       return ("t" ++ show s)
+
+freshLocName :: Monad m => StateT Int m String
+freshLocName = do s <- get
+                  modify (+1)
+                  return ("L" ++ show s)
+
+blocksConvert :: Ir -> StateT Int (Writer Blocks) Expr
+blocksConvert (IrVar name) = return (V (G name))
+blocksConvert (IrConst (CNat n)) = return (V (C n))
+blocksConvert (IrBinaryOp op e1 e2) = do e1' <- blocksConvert e1
+                                         e2' <- blocksConvert e2
+                                         t1 <- freshRegisterName
+                                         t2 <- freshRegisterName
+                                         t3 <- freshRegisterName
+                                         loc <- freshLocName
+                                         let r1 = Temp t1
+                                         let r2 = Temp t2
+                                         let r3 = Temp t3
+                                         tell [(loc, 
+                                               [Assign r1 e1',
+                                                Assign r2 e2',
+                                                Assign r3 (BinOp op (R r1) (R r2))],
+                                                Return (R r3))]
+                                         return (V (R r3))
+blocksConvert (IrUnaryOp op e) = do e' <- blocksConvert e
+                                    t <- freshRegisterName
+                                    tr <- freshRegisterName
+                                    loc <- freshLocName
+                                    let r = Temp t
+                                    let rr = Temp tr
+                                    tell [(loc, 
+                                           [Assign r e',
+                                            Assign rr (UnOp op (R r))],
+                                            Return (R rr))]
+                                    return (V (R rr))
+blocksConvert (IrIfZ e1 e2 e3) = do phi <- freshLocName
+                                    e2' <- blocksConvert e2
+                                    t2 <- freshRegisterName
+                                    l2 <- freshLocName
+                                    tell [(l2,
+                                           [Assign (Temp t2) e2'],
+                                           Jump phi)]
+                                    e3' <- blocksConvert e3
+                                    t3 <- freshRegisterName
+                                    l3 <- freshLocName
+                                    tell [(l3,
+                                           [Assign (Temp t3) e3'],
+                                           Jump phi)]
+                                    e1' <- blocksConvert e1
+                                    t1 <- freshRegisterName
+                                    entry <- freshLocName
+                                    tell [(entry,
+                                           [Assign (Temp t1) e1'],
+                                           CondJump (Eq (C 0) (extractValue e1')) l2 l3)]
+                                    t <- freshRegisterName
+                                    tell [(phi,
+                                          [Assign (Temp t) (Phi [(l2, R (Temp t2)), (l3, R (Temp t3))])],
+                                          Return (R (Temp t)))]
+                                    return (V (R (Temp t)))
+blocksConvert (IrCall e es) = do e' <- blocksConvert e
+                                 --t1 <- freshRegisterName
+                                 --l1 <- freshLocName
+                                 --tell [(l1,
+                                 --     [Assign (Temp t1) e'],
+                                 --     Return (R (Temp t1)))]
+                                 vals <- aux es
+                                 t2 <- freshRegisterName
+                                 l2 <- freshLocName
+                                 tell [(l2,
+                                       [Assign (Temp t2) (Call (extractValue e') vals)],
+                                       Return (V (R (Temp t2))))] --ver como poner jump aca
+                                 return (V (R (Temp t2)))
+blocksConvert (IrLet name e1 e2) = do e1' <- blocksConvert e1
+                                      l1 <- freshLocName
+                                      tell [(l1,
+                                             [Store name e1'],
+                                             Return (extractValue e1'))]
+                                      e2' <- blocksConvert e2
+                                      l2 <- freshLocName
+                                      t <- freshRegisterName
+                                      tell [(l2,
+                                           [Assign (Temp t) e2'],
+                                           Return (R (Temp t)))]
+                                      return (V (R (Temp t)))
+blocksConvert (IrAccess e n) = do e' <- blocksConvert e
+                                  l <- freshLocName
+                                  t <- freshRegisterName
+                                  tell [(l,
+                                         [Assign (Temp t) (Access (extractValue e') n)],
+                                         Return (extractValue e'))]
+                                  return (V (R (Temp t)))
+blocksConvert (MkClosure name es) = 
+    
+extractValue :: Expr -> Val
+extractValue (V v) = v
+extractValue _ = undefined
+
+
+-- aux :: [Expr] -> StateT Int (Writer Blocks) [Expr]
+aux (e : es) = do e' <- blocksConvert e
+                  es' <- aux es
+                  return (extractValue e' : es')
+aux [] = return []
+
+
 
 print :: (Blocks, [Inst], Val) -> String
 print (bs, is, v) =

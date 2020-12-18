@@ -41,18 +41,35 @@ eval (UnaryOp p Succ t) = do
         te <- eval t
         case te of
           Const _ (CNat n) -> return (Const p (CNat (n+1)))
-          _                -> abort ("Error de tipo en runtime!")
+          _                -> abort "Error de tipo en runtime!"
 eval (UnaryOp p Pred t) = do
         te <- eval t
         case te of
           Const _ (CNat n) -> return (Const p (CNat (max 0 (n-1))))
-          _                -> abort ("Error de tipo en runtime!")
+          _                -> abort "Error de tipo en runtime!"
+eval (BinaryOp p Sum t1 t2) = do
+        t1e <- eval t1
+        case t1e of
+           Const _ (CNat n) -> do t2e <- eval t2
+                                  case t2e of
+                                     Const _ (CNat m) -> return (Const p (CNat (n + m)))
+                                     _ -> abort "Error de tipo en runtime!"
+           _ -> abort "Error de tipo en runtime!"
+eval (BinaryOp p Sub t1 t2) = do
+      t1e <- eval t1
+      case t1e of
+         Const _ (CNat n) -> do t2e <- eval t2
+                                case t2e of
+                                    Const _ (CNat m) -> return (Const p (CNat (max 0 (n - m))))
+                                    _ -> abort "Error de tipo en runtime!"
+         _ -> abort "Error de tipo en runtime!"
 eval (IfZ p c t e) = do
      ce <- eval c
      case ce of
        Const _ (CNat 0) -> eval t
        Const _ (CNat _) -> eval e
-       c' -> abort ("Error de tipo en runtime!")
-eval (Let _ _ _ _ _) = undefined
+       c' -> abort "Error de tipo en runtime!"
+eval (Let p _ _ t1 t2) = do te1 <- eval t1
+                            eval (subst t2 te1)
 -- nada más para reducir
 eval t = return t
