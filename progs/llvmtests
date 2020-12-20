@@ -1,0 +1,2 @@
+let c : Nat = 1 + 2
+let d : Nat = 50

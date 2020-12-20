@@ -44,7 +44,8 @@ closureConvert (Lam _ x _ t) = do x' <- fresh x
 closureConvert (App _ t1 t2) = do t1' <- closureConvert t1
                                   t2' <- closureConvert t2
                                   name <- fresh "clo"
-                                  return (IrLet name t1' (IrCall (IrAccess (IrVar name) 0) [IrVar name, t2']))
+                                  let clo = IrVar name
+                                  return (IrLet name t1' (IrCall (IrAccess clo 0) [clo, t2']))
 closureConvert (UnaryOp _ op t) = do t' <- closureConvert t
                                      return (IrUnaryOp op t')
 closureConvert (BinaryOp _ op t1 t2) = do t1' <- closureConvert t1

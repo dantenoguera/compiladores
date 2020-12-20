@@ -1,4 +1,3 @@
-{-# LANGUAGE BlockArguments #-}
 module CIR where
 
 import Lang ( BinaryOp, Name, UnaryOp, Const(..) )
@@ -49,36 +48,28 @@ type CanonVal = String -- Sólo el nombre, tipo puntero siempre
 newtype CanonProg = CanonProg [Either CanonFun CanonVal]
 
 
---data IrDecl = IrVal {irDeclName :: Name, irDeclDef :: Ir}
---            | IrFun {irDeclName :: Name, irDeclArgNames :: [Name], irDeclBody :: Ir}
-{-
-data Ir = IrVar Name
-        | IrCall Ir [Ir]
-        | IrConst Const
-        | IrUnaryOp UnaryOp Ir
-        | IrBinaryOp BinaryOp Ir Ir
-        | IrLet Name Ir Ir
-        | IrIfZ Ir Ir Ir
-        | MkClosure Name [Ir]
-        | IrAccess Ir Int
-        deriving Show
--}
+-- IrVal {irDeclName = "d", irDeclDef = IrConst (CNat 50)}
+-- IrVal {irDeclName = "c", irDeclDef = IrBinaryOp Sum (IrVar "d") (IrConst (CNat 1))}
 
-
-
+runCanon :: [IrDecl] -> CanonProg
 runCanon ds = let (pcfmainBody, prog) = go ds 0
-              in CanonProg ((Left ("pcfmain", [], pcfmainBody)): prog)
+              in CanonProg (Left ("pcfmain", [], pcfmainBody) : prog)-- ver el orden en que se guardan las cosas, sino se cambia
               where go (d : ds) n = case d of
                                       IrVal name def -> let ((def', s), blocks) = runWriter (runStateT (blocksConvert def) n)
-                                                        let (pcfmainBody, prog) = go ds s
-                                                        in ((Store name def') : pcfmainBody, (Right name) : prog)
+                                                            ((_, s'), pcfblock) = runWriter (runStateT (pcfmainBlockBuild name def') s)
+                                                            (pcfmainBody, prog) = go ds s'
+                                                        in (blocks ++ pcfblock ++ pcfmainBody, Right name : prog)
                                       IrFun name args body -> let ((_, s), blocks) = runWriter (runStateT (blocksConvert body) n)
-                                                              let (pcfmainBody, prog) = go ds s
-                                                              in (pcfmainBody, (Left (name, args, blocks)) : prog)
+                                                                  (pcfmainBody, prog) = go ds s
+                                                              in (pcfmainBody, Left (name, args, blocks) : prog)
                     go [] _ = ([], [])
 
-
-
+pcfmainBlockBuild :: Name -> Expr -> StateT Int (Writer Blocks) ()
+pcfmainBlockBuild n e = do l <- freshLocName
+                           tell [(l,
+                                 [Store n e],
+                                 Return (G n))]
+                       
 freshRegisterName :: Monad m => StateT Int m String
 freshRegisterName = do s <- get
                        modify (+1)
@@ -153,7 +144,7 @@ blocksConvert (IrCall e es) = do e' <- blocksConvert e
                                  l2 <- freshLocName
                                  tell [(l2,
                                        [Assign (Temp t2) (Call (extractValue e') vals)],
-                                       Return (V (R (Temp t2))))] --ver como poner jump aca
+                                       Return (R (Temp t2)))] --ver como poner jump aca
                                  return (V (R (Temp t2)))
 blocksConvert (IrLet name e1 e2) = do e1' <- blocksConvert e1
                                       l1 <- freshLocName
@@ -174,14 +165,19 @@ blocksConvert (IrAccess e n) = do e' <- blocksConvert e
                                          [Assign (Temp t) (Access (extractValue e') n)],
                                          Return (extractValue e'))]
                                   return (V (R (Temp t)))
-blocksConvert (MkClosure name es) = 
-    
+blocksConvert (Hoist.MkClosure name es) = do vals <- aux es
+                                             l <- freshLocName
+                                             tell [(l,
+                                                  [Store name (CIR.MkClosure l vals)],-- ver que tiene que ser el loc este, si se puede utilizar el l que tenemos
+                                                   Return (G name))]
+                                             return (V (G name))
+                                             
+
 extractValue :: Expr -> Val
 extractValue (V v) = v
-extractValue _ = undefined
+extractValue _ = undefined -- mejorar esto
 
 
--- aux :: [Expr] -> StateT Int (Writer Blocks) [Expr]
 aux (e : es) = do e' <- blocksConvert e
                   es' <- aux es
                   return (extractValue e' : es')

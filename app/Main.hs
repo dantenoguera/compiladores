@@ -21,6 +21,7 @@ import Data.Char ( isSpace )
 import Control.Exception ( catch , IOException )
 import System.Environment ( getArgs )
 import System.IO ( stderr, hPutStr )
+import System.Process
 
 import Global ( GlEnv(..) )
 import Errors
@@ -34,6 +35,13 @@ import TypeChecker ( tc, tcDecl )
 import CEK ( seek, destroy, valToTerm )
 import Bytecompile
 import Hoist ( runCC )
+import CIR ( runCanon )
+import InstSel ( codegen )
+
+import Data.Text.Lazy.IO as TIO ( writeFile )
+--import LLVM.AST -- necesario para pretty printing?
+import LLVM.Pretty ( ppllvm )
+
 
 import Options.Applicative hiding ( Const )
 
@@ -44,6 +52,7 @@ data Mode = Interactive
           | Bytecompile
           | Run
           | ClosureConvert
+          | LLVMcompile
 
 
 -- | Parser de banderas
@@ -54,7 +63,8 @@ parseMode =
     <|> flag' Run (long "run" <> short 'r' <> help "Ejecutar bytecode en la BVM")
     <|> flag Interactive Interactive ( long "interactive" <> short 'i'
                                                           <> help "Ejecutar en forma interactiva" )
-    <|> flag' ClosureConvert (long "closureconvert" <> short 'a' <> help "Aplicar conversion de clausuras y hosting") --ver si deberiamos usar f'
+    <|> flag' ClosureConvert (long "closureconvert" <> short 'a' <> help "Aplicar conversion de clausuras y hosting")
+    <|> flag' LLVMcompile (long "llvmcompile" <> short 'l' <> help "Compila a codigo LLVM")
 
 
 -- | Parser de opciones general, consiste de un modo y una lista de archivos a procesar
@@ -101,19 +111,53 @@ go (Bytecompile, files) = do runPCF $ catchErrors $  byteCompileFiles files
 go (Run, files) = runFiles files
 go (ClosureConvert, files) = do runPCF $ catchErrors $ closureConvertFiles files
                                 return ()
+go (LLVMcompile, files) = do runPCF $ catchErrors $ llvmCompileFiles files
+                             return ()
 
+------------------
+-- LLVM COMPILE
+------------------
+--llvmCompileFiles :: MonadPCF m => [FilePath] -> m()
+--llvmCompileFiles (f : fs) = do llvmCompileFile f
+--                               llvmCompileFiles fs
+
+llvmCompileFiles :: MonadPCF m => [FilePath] -> m()
+llvmCompileFiles = mapM_ llvmCompileFile
+                            
+
+llvmCompileFile :: MonadPCF m => FilePath -> m()
+llvmCompileFile f =  do decls <- parseFile f
+                        decls' <- handle decls
+                        -- [printPCF ((show decl) ++ "\n") | decl <- runCC decls']
+                        let llvm = codegen (runCanon (runCC decls'))
+                        let commandline = "clang -Wno-override-module output.ll src/runtime.c -lgc -o prog"
+                        liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
+                        liftIO $ system commandline
+                        return ()
+                        where handle (dn : ds) = do dn' <- desugarDecl dn
+                                                    let d = elab_decl dn'
+                                                    tcDecl d
+                                                    ds' <- handle ds
+                                                    return (d : ds')
+                              handle [] = return []
+                              print (d : ds) = do printPCF (show d)
+                                                  print ds
+                              print [] = return ()
+                              
 ------------------
 -- CLOSURE CONVERT
 ------------------
+--closureConvertFiles :: MonadPCF m => [FilePath] -> m()
+--closureConvertFiles (f : fs) = do closureConvertFile f
+--                                  closureConvertFiles fs
+--closureConvertFiles [] = return ()
+
 closureConvertFiles :: MonadPCF m => [FilePath] -> m()
-closureConvertFiles (f : fs) = do closureConvertFile f
-                                  closureConvertFiles fs
-closureConvertFiles [] = return ()
+closureConvertFiles = mapM_ closureConvertFile
 
 closureConvertFile :: MonadPCF m => FilePath -> m ()
 closureConvertFile f = do decls <- parseFile f
                           decls' <- handle decls
-                          -- [printPCF ((show decl) ++ "\n") | decl <- runCC decls']
                           print (runCC decls')
                           where handle (dn : ds) = do dn' <- desugarDecl dn
                                                       let d = elab_decl dn'
@@ -130,10 +174,13 @@ closureConvertFile f = do decls <- parseFile f
 ---------------
 -- TYPECHECKING
 ---------------
+--typeCheckFiles :: MonadPCF m => [FilePath] -> m ()
+--typeCheckFiles (f:fs) = do typeCheckFile f
+--                           typeCheckFiles fs
+--typeCheckFiles [] = return ()
+
 typeCheckFiles :: MonadPCF m => [FilePath] -> m ()
-typeCheckFiles (f:fs) = do typeCheckFile f
-                           typeCheckFiles fs
-typeCheckFiles [] = return ()
+typeCheckFiles = mapM_ typeCheckFile
 
 typeCheckFile :: MonadPCF m => FilePath -> m ()
 typeCheckFile f = do
@@ -149,10 +196,13 @@ typeCheckFile f = do
 --------------
 -- COMPILACION
 --------------
+--byteCompileFiles :: MonadPCF m => [FilePath] -> m ()
+--byteCompileFiles (f:fs) = do byteCompileFile f
+--                             byteCompileFiles fs
+--byteCompileFiles [] = return ()
+
 byteCompileFiles :: MonadPCF m => [FilePath] -> m ()
-byteCompileFiles (f:fs) = do byteCompileFile f
-                             byteCompileFiles fs
-byteCompileFiles [] = return ()
+byteCompileFiles = mapM_ byteCompileFile
 
 byteCompileFile :: MonadPCF m => FilePath -> m ()
 byteCompileFile f = do

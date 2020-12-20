@@ -13,3 +13,6 @@ app/Main
 *.bbl
 compiladores.cabal
 *.byte
+output.ll
+.vscode
+prog

@@ -144,7 +144,7 @@ one = cint 1
 
 cgExpr :: CIR.Expr -> M LLVM.AST.Instruction
 -- FIXME: duplicación
-cgExpr (BinOp Lang.Add v1 v2) = do
+cgExpr (BinOp Lang.Sum v1 v2) = do
   v1 <- cgV v1
   v2 <- cgV v2
   vf1 <- freshName
@@ -172,6 +172,7 @@ cgExpr (BinOp Lang.Sub v1 v2) = do
                []]
   return (IntToPtr (LocalReference integer r) ptr [])
 
+{- NO IMPLEMENTADO
 cgExpr (BinOp Lang.Prod v1 v2) = do
   v1 <- cgV v1
   v2 <- cgV v2
@@ -185,13 +186,15 @@ cgExpr (BinOp Lang.Prod v1 v2) = do
                (LocalReference integer vf2)
                []]
   return (IntToPtr (LocalReference integer r) ptr [])
+-}
 
 cgExpr (UnOp Lang.Succ v) = do
-  cgExpr (BinOp Lang.Add v (C 1)) -- trucho
+  cgExpr (BinOp Lang.Sum v (C 1)) -- trucho
 
 cgExpr (UnOp Lang.Pred v) = do
   cgExpr (BinOp Lang.Sub v (C 1)) -- trucho
 
+{-- NO IMPLEMENTADO
 cgExpr (UnOp Lang.Print v) = do
   v <- cgV v
   vf <- freshName
@@ -206,6 +209,8 @@ cgExpr (UnOp Lang.Print v) = do
                  []
                  []]
   return (IntToPtr (LocalReference integer r) ptr [])
+--}
+
 
 cgExpr (CIR.Phi brs) = do
   args <- mapM (\(loc, v) -> do op <- cgV v
@@ -214,7 +219,7 @@ cgExpr (CIR.Phi brs) = do
 
 -- truchísimo
 cgExpr (V v) = do
-  cgExpr (BinOp Lang.Add v (C 0))
+  cgExpr (BinOp Lang.Sum v (C 0))
 
 cgExpr (CIR.Call v args) = do
  v <- cgV v
