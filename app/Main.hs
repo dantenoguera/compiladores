@@ -128,7 +128,7 @@ llvmCompileFiles = mapM_ llvmCompileFile
 llvmCompileFile :: MonadPCF m => FilePath -> m()
 llvmCompileFile f =  do decls <- parseFile f
                         decls' <- handle decls
-                        -- [printPCF ((show decl) ++ "\n") | decl <- runCC decls']
+                        printPCF $ show (runCanon (runCC decls'))
                         let llvm = codegen (runCanon (runCC decls'))
                         let commandline = "clang -Wno-override-module output.ll src/runtime.c -lgc -o prog"
                         liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
@@ -140,10 +140,7 @@ llvmCompileFile f =  do decls <- parseFile f
                                                     ds' <- handle ds
                                                     return (d : ds')
                               handle [] = return []
-                              print (d : ds) = do printPCF (show d)
-                                                  print ds
-                              print [] = return ()
-                              
+
 ------------------
 -- CLOSURE CONVERT
 ------------------

@@ -1,2 +1,3 @@
-let c : Nat = 1 + 2
-let d : Nat = 50
+let a : Nat = 1 + (2 + 3)
+let b : Nat = succ 1
+#let c : Nat = b + 3
