@@ -1,3 +1,61 @@
-let a : Nat = 1 + (2 + 3)
-let b : Nat = succ 1
-#let c : Nat = b + 3
+# let a : Nat = 1 + (2 + 3)
+# let b : Nat = succ 1
+# let c : Nat = ifz 0 then a else b
+
+let f (x : Nat) : Nat = succ x
+
+let ret : Nat = f 0
+
+#__1(__clo2, __x0) {
+#Init:
+#  Assign (Temp "t0") (V (G "__x0"))
+#  Assign (Temp "t1") (UnOp Succ (R (Temp "t0")))
+#Return (R (Temp "t1"))
+#}
+#
+#declare f
+#
+#pcfmain() {
+#Init:
+#  Assign (Temp "t2") (MkClosure "__1" [])
+#  Store "f" (V (R (Temp "t2")))
+#Return (R (Temp "t2"))
+#}
+
+#IrFun {irDeclName = "__1", irDeclArgNames = ["__clo2","__x0"], irDeclBody = IrUnaryOp Succ (IrVar "__x0")}
+#IrVal {irDeclName = "f", irDeclDef = MkClosure "__1" []}
+
+
+
+__1(__clo2, __x0) {
+Init:
+  Assign (Temp "t0") (V (G "__x0"))
+  Assign (Temp "t1") (UnOp Succ (R (Temp "t0")))
+Return (R (Temp "t1"))
+}
+
+declare f
+
+declare ret
+
+pcfmain() {
+Init:
+  Assign (Temp "t2") (MkClosure "__1" [])
+  Store "f" (V (R (Temp "t2")))
+  Store "__clo3" (V (G "f"))
+  Assign (Temp "t3") (Access (G "__clo3") 0)
+  Assign (Temp "t4") (Call (R (Temp "t3")) [G "__clo3",C 0])
+  Assign (Temp "t5") (V (R (Temp "t4")))
+  Store "ret" (V (R (Temp "t5")))
+Return (R (Temp "t5"))
+}
+
+
+output.ll:51:30: error: use of undefined value '@__clo3'
+  store  i32* %__r_11, i32** @__clo3 
+                             ^
+
+
+IrFun {irDeclName = "__1", irDeclArgNames = ["__clo2","__x0"], irDeclBody = IrUnaryOp Succ (IrVar "__x0")}
+IrVal {irDeclName = "f", irDeclDef = MkClosure "__1" []}
+IrVal {irDeclName = "ret", irDeclDef = IrLet "__clo3" (IrVar "f") (IrCall (IrAccess (IrVar "__clo3") 0) [IrVar "__clo3", IrConst (CNat 0)])}

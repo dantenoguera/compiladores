@@ -51,21 +51,20 @@ newtype CanonProg = CanonProg [Either CanonFun CanonVal]
 -- IrVal {irDeclName = "b", irDeclDef = IrBinaryOp Sum (IrVar "a") (IrConst (CNat 3))}
 
 runCanon :: [IrDecl] -> CanonProg
-runCanon ds = let (blocks, prog, s, v) = go ds (0, "Init",[]) (C 0)
+runCanon ds = let (blocks, prog, s, v) = go ds (0, "Init",[]) (C 0) -- declaraciones/estado inicial/retorno del main
                   ((_, _), lastBlock) = runWriter (runStateT (closeBlock (Return v)) s)
               in CanonProg (prog ++ [Left ("pcfmain", [], blocks ++ lastBlock)])-- ver el orden en que se guardan las cosas, sino se cambia
-              where go (d : ds) n v = case d of
-                                      IrVal name def -> let ((v, s), blocks) = runWriter (runStateT (blocksConvert def) n)
+              where go (d : ds) init ret = case d of
+                                      IrVal name def -> let ((v, s), blocks) = runWriter (runStateT (blocksConvert def) init)
                                                             ((_, s'), lastBlock) = runWriter (runStateT (addInst (Store name (V v))) s) -- VER TERMINADOR
                                                             (blockslist, prog, s'', v')  = go ds s' v
                                                         in (blocks ++ lastBlock ++ blockslist, Right name : prog, s'', v')
                                                         
-                                      IrFun name args body -> undefined --let ((_, s), blocks) = runWriter (runStateT (blocksConvert body) n)
-                                                              --    (pcfmainBody, prog) = go ds s
-                                                              --in (pcfmainBody, Left (name, args, blocks) : prog)
-                                                              --    (blockslist, stores, prog, s')  = go ds s
-                                                              --in (blocks ++ blockslist, stores, Left (name, args, blocks) : prog, s')
-                    go [] s v = ([], [], s, v)
+                                      IrFun name args body -> let ((v, s), blocks) = runWriter (runStateT (blocksConvert body) init)
+                                                                  ((_, s'), lastBlock) = runWriter (runStateT (closeBlock (Return v)) s) -- VER TERMINADOR
+                                                                  (blockslist, prog, s'', v')  = go ds s' ret
+                                                              in (blockslist, Left (name, args, blocks ++ lastBlock) : prog, s'', v')
+                    go [] s ret = ([], [], s, ret)
 
 
 pcfmainBlockBuild :: [Inst] -> StateT (Int, Loc, [Inst]) (Writer Blocks) ()
@@ -89,7 +88,7 @@ addInst :: Monad m => Inst -> StateT (Int, Loc, [Inst]) m ()
 addInst i = do (_, _, is) <- get
                modify (\(n, l, is) -> (n, l, is ++ [i]))
 
-closeBlock :: Terminator -> StateT (Int, Loc, [Inst]) (Writer Blocks)  ()
+closeBlock :: Terminator -> StateT (Int, Loc, [Inst]) (Writer Blocks) ()
 closeBlock t = do (_, l, is) <- get
                   tell [(l,is,t)]
                   modify (\(n, l, _) -> (n, l, []))
@@ -178,3 +177,65 @@ instance Show CanonProg where
 
     pr1 (Right v) =
       "declare " ++ v ++ "\n\n"
+
+{-
+declare a
+
+declare b
+
+pcfmain() {
+Init:
+  Assign (Temp "t0") (V (C 2))
+  Assign (Temp "t1") (V (C 3))
+  Assign (Temp "t2") (BinOp Sum (R (Temp "t0")) (R (Temp "t1")))
+  Assign (Temp "t3") (V (C 1))
+  Assign (Temp "t4") (V (R (Temp "t2")))
+  Assign (Temp "t5") (BinOp Sum (R (Temp "t3")) (R (Temp "t4")))
+  Store "a" (V (R (Temp "t5")))
+  Assign (Temp "t6") (V (C 1))
+  Assign (Temp "t7") (UnOp Succ (R (Temp "t6")))
+  Store "b" (V (R (Temp "t7")))
+Return (R (Temp "t7"))
+}
+
+let a : Nat = 1 + (2 + 3)
+let b : Nat = succ 1
+let c : Nat = ifz 0 then a else b
+
+declare a
+
+declare b
+
+declare c
+
+pcfmain() {
+Init:
+  Assign (Temp "t0") (V (C 2))
+  Assign (Temp "t1") (V (C 3))
+  Assign (Temp "t2") (BinOp Sum (R (Temp "t0")) (R (Temp "t1")))
+  Assign (Temp "t3") (V (C 1))
+  Assign (Temp "t4") (V (R (Temp "t2")))
+  Assign (Temp "t5") (BinOp Sum (R (Temp "t3")) (R (Temp "t4")))
+  Store "a" (V (R (Temp "t5")))
+  Assign (Temp "t6") (V (C 1))
+  Assign (Temp "t7") (UnOp Succ (R (Temp "t6")))
+  Store "b" (V (R (Temp "t7")))
+Jump "entry8"
+entry8:
+  Assign (Temp "t12") (V (C 0))
+CondJump (Eq (C 0) (C 0)) "then9" "else10"
+then9:
+  Assign (Temp "t13") (V (G "a"))
+Jump "ifcont11"
+else10:
+  Assign (Temp "t14") (V (G "b"))
+Jump "ifcont11"
+ifcont11:
+  Assign (Temp "t15") (Phi [("then9",R (Temp "t13")),("else10",R (Temp "t14"))])
+  Store "c" (V (R (Temp "t15")))
+Return (R (Temp "t15"))
+}
+
+-}
+
+
