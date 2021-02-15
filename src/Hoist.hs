@@ -37,7 +37,7 @@ closureConvert (Const _ c) = return (IrConst c)
 closureConvert (Lam _ x _ t) = do x' <- fresh x
                                   f <- fresh ""
                                   clo <- fresh "clo"
-                                  let fvars = filter (isPrefixOf "__") (freeVars t)
+                                  let fvars = (map head . group . sort) $ filter (isPrefixOf "__") (freeVars t)
                                   t' <- closureConvert (open x' t)
                                   lift $ tell [IrFun f [clo, x'] (mkIr t' clo fvars)]
                                   return (MkClosure f (map IrVar fvars))
@@ -55,7 +55,7 @@ closureConvert (Fix _ f _ x _ t) = do f' <- fresh ""
                                       x' <- fresh x
                                       clo <- fresh "clo"
                                       r <- fresh f 
-                                      let fvars = filter (isPrefixOf "__") (freeVars t)
+                                      let fvars = (map head . group . sort) $ filter (isPrefixOf "__") (freeVars t)
                                       t' <- closureConvert (openN [r, x'] t)
                                       lift $ tell [IrFun f' [clo, x'] (mkIr t' clo (r : fvars))]
                                       return (MkClosure f' (map IrVar fvars))
@@ -66,7 +66,7 @@ closureConvert (IfZ _ c t1 t2) = do c' <- closureConvert c
 closureConvert (Let _ n _ t1 t2) = do n' <- fresh n 
                                       t1' <- closureConvert t1
                                       t2' <- closureConvert (open n' t2)
-                                      return (IrLet n' t1' t2') -- por que se cambia el n?
+                                      return (IrLet n' t1' t2') -- cambiar el n?
 
 runCC :: [Decl Term] -> [IrDecl]
 runCC ds = go ds 0
@@ -114,4 +114,4 @@ IrVal {irDeclName = "suma", irDeclDef = MkClosure "__4" []}
 IrVal {irDeclName = "suma5", irDeclDef = IrLet "__clo9" (IrVar "suma") (IrCall (IrAccess (IrVar "__clo9") 0) [IrVar "__clo9",IrConst (CNat 5)])}
 IrFun {irDeclName = "__10", irDeclArgNames = ["__clo12","__n11"], irDeclBody = IrLet "__countdown13" (IrAccess (IrVar "__clo12") 1) (IrIfZ (IrVar "__n11") (IrConst (CNat 0)) (IrLet "__clo14" (IrVar "__countdown13") (IrCall (IrAccess (IrVar "__clo14") 0) [IrVar "__clo14",IrBinaryOp Sub (IrVar "__n11") (IrConst (CNat 1))])))}
 IrVal {irDeclName = "countdown", irDeclDef = MkClosure "__10" []}
--}      
+-}

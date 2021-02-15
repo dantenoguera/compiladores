@@ -62,7 +62,7 @@ num = fromInteger <$> natural
 var :: P Name
 var = Tok.lexeme lexer $ do -- antes era identifier
   (c:cs) <- identifier
-  if (isLower c) then return (c:cs) else parserZero
+  if isLower c then return (c:cs) else parserZero
 
 getPos :: P Pos
 getPos = do pos <- getPosition
@@ -71,7 +71,7 @@ getPos = do pos <- getPosition
 tyvar :: P Name
 tyvar = Tok.lexeme lexer $ do
   (c:cs) <- identifier
-  if (isUpper c) then return (c:cs) else parserZero
+  if isUpper c then return (c:cs) else parserZero
                     
 tyatom :: P Ty
 tyatom = (do reserved "Nat"

@@ -1,7 +1,7 @@
 module CIR where
 
 import Lang ( BinaryOp, Name, UnaryOp, Const(..) )
-import Data.List (intercalate)
+import Data.List (intercalate, isPrefixOf)
 import Hoist ( Ir(..), IrDecl(..) )
 import Control.Monad.State
 import Control.Monad.Writer
@@ -50,7 +50,7 @@ newtype CanonProg = CanonProg [Either CanonFun CanonVal]
 -- IrVal {irDeclName = "a", irDeclDef = IrConst (CNat 5)}
 -- IrVal {irDeclName = "b", irDeclDef = IrBinaryOp Sum (IrVar "a") (IrConst (CNat 3))}
 
-runCanon :: [IrDecl] -> CanonProg
+runCanon :: [IrDecl] -> CanonProg -- (resetear estado entre declaraciones???)
 runCanon ds = let (blocks, prog, s, v) = go ds (0, "Init",[]) (C 0) -- declaraciones/estado inicial/retorno del main
                   ((_, _), lastBlock) = runWriter (runStateT (closeBlock (Return v)) s)
               in CanonProg (prog ++ [Left ("pcfmain", [], blocks ++ lastBlock)])-- ver el orden en que se guardan las cosas, sino se cambia
@@ -59,7 +59,7 @@ runCanon ds = let (blocks, prog, s, v) = go ds (0, "Init",[]) (C 0) -- declaraci
                                                             ((_, s'), lastBlock) = runWriter (runStateT (addInst (Store name (V v))) s) -- VER TERMINADOR
                                                             (blockslist, prog, s'', v')  = go ds s' v
                                                         in (blocks ++ lastBlock ++ blockslist, Right name : prog, s'', v')
-                                                        
+
                                       IrFun name args body -> let ((v, s), blocks) = runWriter (runStateT (blocksConvert body) init)
                                                                   ((_, s'), lastBlock) = runWriter (runStateT (closeBlock (Return v)) s) -- VER TERMINADOR
                                                                   (blockslist, prog, s'', v')  = go ds s' ret
@@ -72,13 +72,13 @@ pcfmainBlockBuild stores = do l <- freshLoc "pcfmain"
                               tell [(l,
                                     stores,
                                     Return (C 0))] --Ver que devolvemos
-                       
+
 freshRegister :: Monad m => StateT (Int, Loc, [Inst]) m Reg
 freshRegister = do (n, _, _) <- get
                    modify (\(n, l, is) -> (n + 1, l, is))
                    return (Temp ("t" ++ show n))
 
-               
+
 freshLoc :: Monad m => String -> StateT (Int, Loc, [Inst]) m String
 freshLoc str = do (n, _, _) <- get
                   modify (\(n, l, is) -> (n + 1, l, is))
@@ -97,7 +97,9 @@ changeLoc :: Monad m => Loc -> StateT (Int, Loc, [Inst]) m ()
 changeLoc l = modify (\(n, _, is) -> (n, l, is))
 
 blocksConvert :: Ir -> StateT (Int, Loc, [Inst]) (Writer Blocks) Val
-blocksConvert (IrVar name) = return (G name)
+blocksConvert (IrVar name) = if "__" `isPrefixOf` name 
+                              then return (R (Temp name)) 
+                              else return (G name)
 blocksConvert (IrConst (CNat n)) = return (C n)
 blocksConvert (IrUnaryOp op e) = do v <- blocksConvert e
                                     t <- freshRegister
@@ -148,12 +150,10 @@ blocksConvert (IrCall e es) = do v <- blocksConvert e
                                  addInst (Assign t (Call v vs))
                                  return (R t)
 blocksConvert (IrLet name e1 e2) = do v1 <- blocksConvert e1
-                                      addInst (Store name (V v1))
-                                      v2 <- blocksConvert e2
-                                      t <- freshRegister
-                                      addInst (Assign t (V v2))
-                                      return (R t)
-blocksConvert (Hoist.MkClosure name es) = do vs <- mapM blocksConvert es -- CONSULTAR!!!!!!!!!
+                                      let r = Temp name
+                                      addInst (Assign r (V v1))
+                                      blocksConvert e2
+blocksConvert (Hoist.MkClosure name es) = do vs <- mapM blocksConvert es
                                              t <- freshRegister
                                              addInst (Assign t (CIR.MkClosure name vs))
                                              return (R t)
@@ -237,5 +237,3 @@ Return (R (Temp "t15"))
 }
 
 -}
-
-
