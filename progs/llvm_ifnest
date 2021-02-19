@@ -1,0 +1,1 @@
+let ret : Nat = ifz 1 then 42 else ifz 1 then 3 else 5

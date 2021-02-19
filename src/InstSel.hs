@@ -172,21 +172,19 @@ cgExpr (BinOp Lang.Sub v1 v2) = do
                []]
   return (IntToPtr (LocalReference integer r) ptr [])
 
-{- NO IMPLEMENTADO
-cgExpr (BinOp Lang.Prod v1 v2) = do
-  v1 <- cgV v1
-  v2 <- cgV v2
-  vf1 <- freshName
-  vf2 <- freshName
-  r <- freshName
-  tell [vf1 := PtrToInt v1 integer []]
-  tell [vf2 := PtrToInt v2 integer []]
-  tell [r := Mul False False
-               (LocalReference integer vf1)
-               (LocalReference integer vf2)
-               []]
-  return (IntToPtr (LocalReference integer r) ptr [])
--}
+--cgExpr (BinOp Lang.Prod v1 v2) = do
+--  v1 <- cgV v1
+--  v2 <- cgV v2
+--  vf1 <- freshName
+--  vf2 <- freshName
+--  r <- freshName
+--  tell [vf1 := PtrToInt v1 integer []]
+--  tell [vf2 := PtrToInt v2 integer []]
+--  tell [r := Mul False False
+--               (LocalReference integer vf1)
+--               (LocalReference integer vf2)
+--               []]
+--  return (IntToPtr (LocalReference integer r) ptr [])
 
 cgExpr (UnOp Lang.Succ v) = do
   cgExpr (BinOp Lang.Sum v (C 1)) -- trucho
@@ -194,23 +192,20 @@ cgExpr (UnOp Lang.Succ v) = do
 cgExpr (UnOp Lang.Pred v) = do
   cgExpr (BinOp Lang.Sub v (C 1)) -- trucho
 
-{-- NO IMPLEMENTADO
-cgExpr (UnOp Lang.Print v) = do
-  v <- cgV v
-  vf <- freshName
-  r <- freshName
-  tell [vf := PtrToInt v integer []]
-  tell [r := LLVM.AST.Call
-                 Nothing
-                 CC.C
-                 []
-                 (Right (global (mkName "pcf_print") printTy))
-                 [(LocalReference integer vf, [])]
-                 []
-                 []]
-  return (IntToPtr (LocalReference integer r) ptr [])
---}
-
+--cgExpr (UnOp Lang.Print v) = do
+--  v <- cgV v
+--  vf <- freshName
+--  r <- freshName
+--  tell [vf := PtrToInt v integer []]
+--  tell [r := LLVM.AST.Call
+--                 Nothing
+--                 CC.C
+--                 []
+--                 (Right (global (mkName "pcf_print") printTy))
+--                 [(LocalReference integer vf, [])]
+--                 []
+--                 []]
+--  return (IntToPtr (LocalReference integer r) ptr [])
 
 cgExpr (CIR.Phi brs) = do
   args <- mapM (\(loc, v) -> do op <- cgV v

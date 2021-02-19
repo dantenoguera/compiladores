@@ -1,0 +1,5 @@
+let f (x : Nat) : Nat = succ x
+let g (x : Nat) : Nat = succ x
+let c : Nat = 6
+
+let ret : Nat = f (g c)

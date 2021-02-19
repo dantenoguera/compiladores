@@ -60,9 +60,9 @@ runCanon ds = let (blocks, prog, s, v) = go ds (0, "Init",[]) (C 0) -- declaraci
                                                             (blockslist, prog, s'', v')  = go ds s' v
                                                         in (blocks ++ lastBlock ++ blockslist, Right name : prog, s'', v')
 
-                                      IrFun name args body -> let ((v, s), blocks) = runWriter (runStateT (blocksConvert body) init)
-                                                                  ((_, s'), lastBlock) = runWriter (runStateT (closeBlock (Return v)) s) -- VER TERMINADOR
-                                                                  (blockslist, prog, s'', v')  = go ds s' ret
+                                      IrFun name args body -> let ((v, s), blocks) = runWriter (runStateT (blocksConvert body) (0, "Init", []))
+                                                                  ((_, (n,_,_)), lastBlock) = runWriter (runStateT (closeBlock (Return v)) s) -- VER TERMINADOR
+                                                                  (blockslist,  prog, s'', v')  = go ds init ret --(n,"Init",[])
                                                               in (blockslist, Left (name, args, blocks ++ lastBlock) : prog, s'', v')
                     go [] s ret = ([], [], s, ret)
 
@@ -117,28 +117,30 @@ blocksConvert (IrBinaryOp op e1 e2) = do v1 <- blocksConvert e1
                                          addInst (Assign t3 (BinOp op (R t1) (R t2)))
                                          return (R t3)
 blocksConvert (IrIfZ e1 e2 e3) = do entry <- freshLoc "entry"
-                                    closeBlock (Jump entry)
-                                    changeLoc entry
-                                    v1 <- blocksConvert e1
                                     then' <- freshLoc "then"
                                     else' <- freshLoc "else"
                                     ifcont <- freshLoc "ifcont"
+                                    closeBlock (Jump entry)
+                                    changeLoc entry
+                                    v1 <- blocksConvert e1
                                     t1 <- freshRegister
                                     addInst (Assign t1 (V v1))
-                                    closeBlock (CondJump (Eq (C 0) v1) then' else')
+                                    closeBlock (CondJump (Eq (C 0) (R t1)) then' else')
                                     changeLoc then'
                                     v2 <- blocksConvert e2
                                     t2 <- freshRegister
                                     addInst (Assign t2 (V v2))
+                                    (_, phiThen, _) <- get
                                     closeBlock (Jump ifcont)
                                     changeLoc else'
                                     v3 <- blocksConvert e3
                                     t3 <- freshRegister
                                     addInst (Assign t3 (V v3))
+                                    (_, phiElse, _) <- get
                                     closeBlock (Jump ifcont)
                                     changeLoc ifcont
                                     t <- freshRegister
-                                    addInst (Assign t (Phi [(then', R t2), (else', R t3)]))
+                                    addInst (Assign t (Phi [(phiThen, R t2), (phiElse, R t3)]))
                                     return (R t)
 blocksConvert (IrAccess e n) = do v <- blocksConvert e
                                   t <- freshRegister

@@ -1,0 +1,6 @@
+#let a : Nat = 3 + 6 - 4
+#let b : Nat = succ 1
+let c : Nat = ifz 1 then 2 else 3
+
+
+

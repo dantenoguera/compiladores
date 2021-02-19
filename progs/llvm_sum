@@ -1,0 +1,5 @@
+let rec sum (m n : Nat) : Nat =
+    ifz n then m
+        else sum (succ m) (pred n)
+        
+let ret : Nat = sum 5 10

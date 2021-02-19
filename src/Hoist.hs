@@ -6,6 +6,7 @@ import Subst ( open, openN )
 import Data.List
 
 data IrDecl = IrVal {irDeclName :: Name, irDeclDef :: Ir}
+
             | IrFun {irDeclName :: Name, irDeclArgNames :: [Name], irDeclBody :: Ir}
             deriving Show
 
@@ -29,6 +30,11 @@ fresh n = do s <- get
 mkIr :: Ir -> Name -> [Name] -> Ir
 mkIr t clo vs = go t clo vs 1
         where go t clo (v : vs) i = IrLet v (IrAccess (IrVar clo) i) (go t clo vs (i + 1))
+              go t _ [] _ = t
+
+mkIrFix :: Ir -> Name -> [Name] -> Ir
+mkIrFix t clo vs = go t clo vs 1
+        where go t clo (r : vs) i = IrLet r (IrVar clo) (go t clo vs (i + 1))
               go t _ [] _ = t
 
 closureConvert :: Term -> StateT Int (Writer [IrDecl]) Ir
@@ -57,7 +63,7 @@ closureConvert (Fix _ f _ x _ t) = do f' <- fresh ""
                                       r <- fresh f 
                                       let fvars = (map head . group . sort) $ filter (isPrefixOf "__") (freeVars t)
                                       t' <- closureConvert (openN [r, x'] t)
-                                      lift $ tell [IrFun f' [clo, x'] (mkIr t' clo (r : fvars))]
+                                      lift $ tell [IrFun f' [clo, x'] (mkIrFix t' clo (r : fvars))]
                                       return (MkClosure f' (map IrVar fvars))
 closureConvert (IfZ _ c t1 t2) = do c' <- closureConvert c
                                     t1' <- closureConvert t1
