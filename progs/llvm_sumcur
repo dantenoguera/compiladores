@@ -1,0 +1,6 @@
+let add (x : Nat) : (Nat -> Nat) =
+    fun (y : Nat) -> x + y 
+
+let add5 : Nat -> Nat = add 5
+
+let ret : Nat = add5 10
