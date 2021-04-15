@@ -13,7 +13,7 @@ module Bytecompile
   (Bytecode, bytecompileModule, runBC, bcWrite, bcRead)
  where
 
-import Lang 
+import Lang
 import Subst
 import MonadPCF
 import Common
@@ -32,8 +32,8 @@ newtype Bytecode32 = BC { un32 :: [Word32] }
 {- Esta instancia explica como codificar y decodificar Bytecode de 32 bits -}
 instance Binary Bytecode32 where
   put (BC bs) = mapM_ putWord32le bs
-  get = go 
-    where go =  
+  get = go
+    where go =
            do
             empty <- isEmpty
             if empty
@@ -142,7 +142,7 @@ bct t = do t' <- bc t
            return (t'++[RETURN])
 
 nestDecl :: Module -> Term
-nestDecl [(Decl p n ty b)] = close n (Let p n ty b (V NoPos (Free n)))
+nestDecl [Decl p n ty b] = close n (Let p n ty b (V NoPos (Free n)))
 nestDecl ((Decl p n ty b) : ds) = close n (Let p n ty b (nestDecl ds))
 
 bytecompileModule :: MonadPCF m => Module -> m Bytecode
@@ -158,7 +158,7 @@ bcWrite bs filename = BS.writeFile filename (encode $ BC $ fromIntegral <$> bs++
 
 -- | Lee de un archivo y lo decodifica a bytecode
 bcRead :: FilePath -> IO Bytecode
-bcRead filename = map fromIntegral <$> un32  <$> decode <$> BS.readFile filename
+bcRead filename = (map fromIntegral <$> un32) . decode <$> BS.readFile filename
 
 type Env = [Val]
 data Val = I Int | Fun Env Bytecode | RA Env Bytecode
@@ -167,28 +167,28 @@ runBC :: MonadPCF m => Bytecode -> m ()
 runBC bc = runBC' bc [] []
 
 runBC' :: MonadPCF m => Bytecode -> [Val] -> [Val] -> m ()
-runBC' (CONST:c:xs) e s = runBC' xs e ((I c):s)
+runBC' (CONST:c:xs) e s = runBC' xs e (I c:s)
 runBC' (ACCESS:i:xs) e s = runBC' xs e ((e!!i):s)
-runBC' (FUNCTION:l:xs) e s = runBC' (drop l xs) e ((Fun e (take l xs)):s)
+runBC' (FUNCTION:l:xs) e s = runBC' (drop l xs) e (Fun e (take l xs):s)
 runBC' (RETURN:_) _ (v:(RA e bc):s) = runBC' bc e (v:s)
 runBC' (RETURN:_) _ _ = error "Error RETURN"
-runBC' (CALL:xs) e (v:(Fun ef bc):s) = runBC' bc (v:ef) ((RA e xs):s)
+runBC' (CALL:xs) e (v:(Fun ef bc):s) = runBC' bc (v:ef) (RA e xs:s)
 runBC' (CALL:_) _ _ = error "Error CALL"
 runBC' (TAILCALL:xs) e (v:(Fun ef bc):s) = runBC' bc (v:ef) s
 runBC' (TAILCALL:_) _ _ = error "Error TAILCALL"
-runBC' (SUCC:xs) e ((I n):s) = runBC' xs e ((I (n+1)):s)
+runBC' (SUCC:xs) e ((I n):s) = runBC' xs e (I (n+1):s)
 runBC' (SUCC:_) _ _ = error "Error SUCC"
 runBC' (PRED:xs) e ((I n):s) = case n of
-                                0 -> runBC' xs e ((I 0):s)
-                                x -> runBC' xs e ((I (x-1)):s)
+                                0 -> runBC' xs e (I 0:s)
+                                x -> runBC' xs e (I (x-1):s)
 runBC' (PRED:_) _ _ = error "Error PRED"
-runBC' (SUM:xs) e ((I m):(I n):s) = runBC' xs e ((I (m + n)):s)
+runBC' (SUM:xs) e ((I m):(I n):s) = runBC' xs e (I (m + n):s)
 runBC' (SUM:_) _ _ = error "Error SUM"
-runBC' (SUB:xs) e ((I m):(I n):s) = if (m>n) then runBC' xs e ((I (m - n)):s) else runBC' xs e ((I 0):s)
+runBC' (SUB:xs) e ((I m):(I n):s) = if m>n then runBC' xs e (I (m - n):s) else runBC' xs e (I 0:s)
 runBC' (SUB:_) _ _ = error "Error SUB"
 
-runBC' (FIX:xs) e ((Fun e' bc):s) = runBC' xs e ((Fun ((Fun efix bc):e) bc):s)
-                                    where efix = (Fun efix bc):e
+runBC' (FIX:xs) e ((Fun e' bc):s) = runBC' xs e (Fun ((Fun efix bc):e) bc:s)
+                                    where efix = Fun efix bc:e
 runBC' (IFZ:xs) e ((I c):s) = case c of
                                   0 -> runBC' (tail (tail xs)) e s
                                   _ -> runBC' xs e s
@@ -197,6 +197,6 @@ runBC' (SHIFT:xs) e (v:s) = runBC' xs (v:e) s
 runBC' (DROP:xs) (v:e) s = runBC' xs e s
 runBC' (JUMP:n:xs) e s = runBC' (drop n xs) e s
 runBC' (PRINT:xs) e ((I n):s) = do printPCF (show n)
-                                   runBC' xs e ((I n):s)
+                                   runBC' xs e (I n:s)
 runBC' (PRINT:_) _ _ = error "Error PRINT"
 runBC' (STOP:_) _ _ = return ()

@@ -94,7 +94,7 @@ parseFile f = do
 main :: IO ()
 main = execParser opts >>= go
   where
-    opts = info (parseArgs <**> helper) 
+    opts = info (parseArgs <**> helper)
                 ( fullDesc
                   <> progDesc "Compilador de PCF"
                   <> header "Compilador de PCF de la materia Compiladores 2020" )
@@ -117,24 +117,22 @@ go (LLVMcompile, files) = do runPCF $ catchErrors $ llvmCompileFiles files
 ------------------
 -- LLVM COMPILE
 ------------------
---llvmCompileFiles :: MonadPCF m => [FilePath] -> m()
---llvmCompileFiles (f : fs) = do llvmCompileFile f
---                               llvmCompileFiles fs
-
 llvmCompileFiles :: MonadPCF m => [FilePath] -> m()
 llvmCompileFiles = mapM_ llvmCompileFile
-                            
+
 
 llvmCompileFile :: MonadPCF m => FilePath -> m()
 llvmCompileFile f =  do decls <- parseFile f
                         decls' <- handle decls
-                        printPCF $ show (runCanon (runCC decls'))
+                        -- printPCF $ show (runCanon (runCC decls'))
                         let llvm = codegen (runCanon (runCC decls'))
                         let commandline = "clang -Wno-override-module output.ll src/runtime.c -lgc -o prog"
                         liftIO $ TIO.writeFile "output.ll" (ppllvm llvm)
                         liftIO $ system commandline
                         return ()
-                        where handle (dn : ds) = do dn' <- desugarDecl dn
+                        where handle ((DeclType p n ty): ds) = do addTy n ty
+                                                                  handle ds
+                              handle (dn : ds) = do dn' <- desugarDecl dn
                                                     let d = elab_decl dn'
                                                     tcDecl d
                                                     ds' <- handle ds
@@ -144,11 +142,6 @@ llvmCompileFile f =  do decls <- parseFile f
 ------------------
 -- CLOSURE CONVERT
 ------------------
---closureConvertFiles :: MonadPCF m => [FilePath] -> m()
---closureConvertFiles (f : fs) = do closureConvertFile f
---                                  closureConvertFiles fs
---closureConvertFiles [] = return ()
-
 closureConvertFiles :: MonadPCF m => [FilePath] -> m()
 closureConvertFiles = mapM_ closureConvertFile
 
@@ -156,7 +149,9 @@ closureConvertFile :: MonadPCF m => FilePath -> m ()
 closureConvertFile f = do decls <- parseFile f
                           decls' <- handle decls
                           print (runCC decls')
-                          where handle (dn : ds) = do dn' <- desugarDecl dn
+                          where handle ((DeclType p n ty): ds) = do addTy n ty
+                                                                    handle ds
+                                handle (dn : ds) = do dn' <- desugarDecl dn
                                                       let d = elab_decl dn'
                                                       tcDecl d
                                                       ds' <- handle ds
@@ -164,18 +159,13 @@ closureConvertFile f = do decls <- parseFile f
                                 handle [] = return []
                                 print (d : ds) = do printPCF (show d)
                                                     print ds
-                                print [] = return () 
+                                print [] = return ()
 
-                                                      
+
 
 ---------------
 -- TYPECHECKING
 ---------------
---typeCheckFiles :: MonadPCF m => [FilePath] -> m ()
---typeCheckFiles (f:fs) = do typeCheckFile f
---                           typeCheckFiles fs
---typeCheckFiles [] = return ()
-
 typeCheckFiles :: MonadPCF m => [FilePath] -> m ()
 typeCheckFiles = mapM_ typeCheckFile
 
@@ -183,7 +173,9 @@ typeCheckFile :: MonadPCF m => FilePath -> m ()
 typeCheckFile f = do
   decls <- parseFile f
   handle decls
-  where handle (dn : ds) = do dn' <- desugarDecl dn
+  where handle ((DeclType p n ty): ds) = do addTy n ty
+                                            handle ds
+        handle (dn : ds) = do dn' <- desugarDecl dn
                               let d = elab_decl dn'
                               tcDecl d
                               addDecl d
@@ -193,11 +185,6 @@ typeCheckFile f = do
 --------------
 -- COMPILACION
 --------------
---byteCompileFiles :: MonadPCF m => [FilePath] -> m ()
---byteCompileFiles (f:fs) = do byteCompileFile f
---                             byteCompileFiles fs
---byteCompileFiles [] = return ()
-
 byteCompileFiles :: MonadPCF m => [FilePath] -> m ()
 byteCompileFiles = mapM_ byteCompileFile
 
@@ -208,14 +195,16 @@ byteCompileFile f = do
   c <- bytecompileModule decls'
   liftIO $ bcWrite c (f ++ ".byte")
   return ()
-  where handle (dn : ds) = do dn' <- desugarDecl dn
+  where handle ((DeclType p n ty): ds) = do addTy n ty
+                                            handle ds
+        handle (dn : ds) = do dn' <- desugarDecl dn
                               let d = elab_decl dn'
-                              tcDecl d --Si no es necesario hacer chequeo de tipos en el compilador sacar estas dos lineas
-                              addDecl d --
+                              tcDecl d
+                              addDecl d
                               ds' <- handle ds
                               return (d : ds')
         handle [] = return []
-  
+
 
 --------------
 -- RUN
@@ -257,7 +246,7 @@ main' args = do
         when (inter s) $ liftIO $ putStrLn
           (  "Entorno interactivo para PCF0.\n"
           ++ "Escriba :? para recibir ayuda.")
-        loop  
+        loop
   where loop = do
            minput <- getInputLine prompt
            case minput of
@@ -267,7 +256,7 @@ main' args = do
                        c <- liftIO $ interpretCommand x
                        b <- lift $ catchErrors $ handleCommand c
                        maybe loop (flip when loop) b
- 
+
 
 compileFiles ::  MonadPCF m => [String] -> m ()
 compileFiles []     = return ()
@@ -289,9 +278,9 @@ handleDecl ndecl = do
         ndecl' <- desugarDecl ndecl
         let decl@(Decl p x ty t) = elab_decl ndecl'
         tcDecl decl
-        te <- runCEK t --te <- eval t 
+        te <- runCEK t
         addDecl (Decl p x ty te)
-        
+
 
 -- | Parser simple de comando interactivos
 interpretCommand :: String -> IO Command
@@ -361,7 +350,7 @@ compilePhrase ::  MonadPCF m => String -> m ()
 compilePhrase x =
   do
     dot <- parseIO "<interactive>" declOrTm x
-    case dot of 
+    case dot of
       Left d  -> handleDecl d
       Right t -> handleTerm t
 
@@ -372,7 +361,7 @@ handleTerm t = do
          let tt = elab t'
          s <- get
          ty <- tc tt (tyEnv s)
-         te <- runCEK tt -- te <- eval tt
+         te <- runCEK tt
          printPCF (pp te ++ " : " ++ ppTy ty)
 
 
@@ -382,9 +371,9 @@ printPhrase x =
     x' <- parseIO "<interactive>" tm x
     x'' <- desugarTerm x'
     let  ex = elab x''
-    t  <- case x'' of 
+    t  <- case x'' of
            (V p f) -> maybe ex id <$> lookupDecl f
-           _       -> return ex  
+           _       -> return ex
     printPCF "NTerm:"
     printPCF (show x')
     printPCF "\nTerm:"
@@ -410,8 +399,9 @@ runCEK t = do val <- seek t [] []
 -- DESUGAR
 ----------
 typeVariableExpand :: ([Name],Ty) -> Ty -> Ty
-typeVariableExpand (n:ns,xty) tx = typeVariableExpand (ns,xty) (FunTy xty tx) --no hago desugar type por que lo hago en el tipo resultante
+typeVariableExpand (n:ns,xty) tx = typeVariableExpand (ns,xty) (FunTy xty tx)
 typeVariableExpand ([],xty) tx   = tx
+
 desugarDecl :: MonadPCF m => Decl NSTerm -> m (Decl NTerm)
 desugarDecl (Decl p n ty t) =  do ty' <- desugarTy ty
                                   t' <- desugarTerm t
@@ -419,12 +409,12 @@ desugarDecl (Decl p n ty t) =  do ty' <- desugarTy ty
 desugarDecl (DeclLetf p n args ty t) = do ty' <- desugarTy (foldr typeVariableExpand ty args)
                                           t' <- desugarTerm (SLam p args t)
                                           return (Decl p n ty' t')
-desugarDecl (DeclLetRec p n [([x],xty)] ty t) = do ty' <- desugarTy ty --podria usarse en rl t' tambien, sino estas haciendo desugar dos veces (aunque se va a aplicar igual)
-                                                   t' <- desugarTerm (SFix p n (FunTy xty ty) x xty t) --no hago desugarTy por que el desugarTerm se encarga de aplicarlo
+desugarDecl (DeclLetRec p n [([x],xty)] ty t) = do ty' <- desugarTy ty 
+                                                   t' <- desugarTerm (SFix p n (FunTy xty ty) x xty t) 
                                                    return (Decl p n ty' t')
-desugarDecl (DeclLetRec p n (((x1:rest), t1):xs) ty t) = case rest of --el caso base de DeclLetRec arriba se encarga de dezucarar los tipos y los terminos
-                                                              [] -> do desugarDecl (DeclLetRec p n [([x1], t1)] (foldr typeVariableExpand ty xs) (SLam p xs t))
-                                                              s -> do desugarDecl (DeclLetRec p n [([x1], t1)] (foldr typeVariableExpand ty ((s, t1):xs)) (SLam p ((s, t1):xs) t))
+desugarDecl (DeclLetRec p n ((x1:rest, t1):xs) ty t) = case rest of
+                                                            [] -> do desugarDecl (DeclLetRec p n [([x1], t1)] (foldr typeVariableExpand ty xs) (SLam p xs t))
+                                                            s -> do desugarDecl (DeclLetRec p n [([x1], t1)] (foldr typeVariableExpand ty ((s, t1):xs)) (SLam p ((s, t1):xs) t))
 desugarDecl (Eval t) = do t' <- desugarTerm t
                           return (Eval t')
 
@@ -451,17 +441,17 @@ desugarTerm (SLet p n ty t1 t2) = do ty' <- desugarTy ty
                                      t1' <- desugarTerm t1
                                      t2' <- desugarTerm t2
                                      return (Let p n ty' t1' t2')
-desugarTerm (SLetf p f xs ty t1 t2) = desugarTerm (SLet p f (foldr typeVariableExpand ty xs) (SLam p xs t1) t2)       
+desugarTerm (SLetf p f xs ty t1 t2) = desugarTerm (SLet p f (foldr typeVariableExpand ty xs) (SLam p xs t1) t2)
 desugarTerm (SLam p xs t) = do t' <- desugarTerm t
                                let (Lam p' n' nty t'') = f p xs t'
                                nty' <- desugarTy nty
                                return (Lam p' n' nty' t'')
-                               where f p (((n:ns),nty):xs) t = Lam p n nty (f p ((ns, nty):xs) t)
+                               where f p ((n:ns,nty):xs) t = Lam p n nty (f p ((ns, nty):xs) t)
                                      f p (([],nty):xs) t = f p xs t
                                      f p [] t = t
 desugarTerm (SUnaryOpFree p op) = return (Lam p "x" NatTy (UnaryOp p op (V p "x")))
 desugarTerm (SLetRec p f [([x],xty)] ty t1 t2) = desugarTerm (SLet p f (FunTy xty ty) (SFix p f (FunTy xty ty) x xty t1) t2)
-desugarTerm (SLetRec p f (((x1:rest), ty1):xs) ty t1 t2) | null rest = desugarTerm (SLetRec p f [([x1], ty1)] (foldr typeVariableExpand ty xs) (SLam p xs t1) t2)
+desugarTerm (SLetRec p f ((x1:rest, ty1):xs) ty t1 t2) | null rest = desugarTerm (SLetRec p f [([x1], ty1)] (foldr typeVariableExpand ty xs) (SLam p xs t1) t2)
                                                          | otherwise = desugarTerm (SLetRec  p f [([x1], ty1)] (foldr typeVariableExpand ty ((rest, ty1):xs)) (SLam p ((rest, ty1):xs) t1) t2)
 
 desugarTy :: MonadPCF m => Ty -> m Ty
@@ -473,4 +463,3 @@ desugarTy NatTy = return NatTy
 desugarTy (FunTy t1 t2) = do t1' <- desugarTy t1
                              t2' <- desugarTy t2
                              return (FunTy t1 t2)
----------

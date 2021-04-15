@@ -27,14 +27,6 @@ data Ty =
     | NameTy Name
     deriving (Show,Eq)
 
-{-
-data STy = 
-      STyVar Name
-    | STyNat 
-    | STyFun STy STy
-    deriving (Show,Eq)
--} 
-
 type Name = String
 
 data Const = CNat Int
@@ -48,7 +40,7 @@ data BinaryOp = Sum | Sub
 
 -- | tipo de datos de declaraciones, parametrizado por el tipo del cuerpo de la declaración
 data Decl a =
-    Decl { declPos :: Pos, declName :: Name, declType :: Ty, declBody :: a } --Modificamos poniendo el tipo por que ya no se aceptan declaraciones sin tipo
+    Decl { declPos :: Pos, declName :: Name, declType :: Ty, declBody :: a }
   | DeclLetf { declPos :: Pos, declName :: Name, declArgs :: [([Name], Ty)] ,declType :: Ty, declBody :: a }
   | DeclLetRec { declPos :: Pos, declName :: Name, declArgs :: [([Name], Ty)] ,declType :: Ty, declBody :: a }
   | DeclType { declPos :: Pos, declName :: Name, declType :: Ty }

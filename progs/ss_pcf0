@@ -1,0 +1,3 @@
+fix (suma: Nat -> Nat -> Nat) (m: Nat) -> 
+    fun (n:Nat) -> 
+        ifz n then m else succ (suma m (pred n))

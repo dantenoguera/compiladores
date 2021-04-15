@@ -1,4 +1,0 @@
-let rec sum (m n : Nat) : Nat =
-    ifz n then m
-        else sum (succ m) (pred n)
-let p : Nat = sum 0 1000000

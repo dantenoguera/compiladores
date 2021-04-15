@@ -62,11 +62,6 @@
 #define TAILCALL 17
 
 
-//[ FUNCTION 11  CONST   1 JUMP  3  CONST  0  RETURN  CONST  1  RETURN  RETURN  CONST  1  CALL SHIFT  ACCESS  0 DROP PRINT  STOP]
-//[ 4 11  2  1 11  3  2  0  1  2  1  1  1  2  1  5 12  3  0 13 14  10]
-//(fun (x : Nat) -> ifz 1 then 0 else 1) 1
-
-
 #define CHUNK 4096
 
 /*
@@ -394,13 +389,6 @@ void run(code init_c)
         }
     }
 }
-
-/* [2,5,12,3,0,13]
-[CONST,5,SHIFT,ACCESS,0,DROP]
-let p7 : Nat = 5
-
-let p7 : Nat = 5 in p7
-*/
 
 /*
  * main simplemente llama al intérprete sobre el código que hay en el

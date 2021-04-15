@@ -47,31 +47,21 @@ type CanonFun = (String, [String], [BasicBlock])
 type CanonVal = String -- Sólo el nombre, tipo puntero siempre
 newtype CanonProg = CanonProg [Either CanonFun CanonVal]
 
--- IrVal {irDeclName = "a", irDeclDef = IrConst (CNat 5)}
--- IrVal {irDeclName = "b", irDeclDef = IrBinaryOp Sum (IrVar "a") (IrConst (CNat 3))}
-
-runCanon :: [IrDecl] -> CanonProg -- (resetear estado entre declaraciones???)
-runCanon ds = let (blocks, prog, s, v) = go ds (0, "Init",[]) (C 0) -- declaraciones/estado inicial/retorno del main
+runCanon :: [IrDecl] -> CanonProg
+runCanon ds = let (blocks, prog, s, v) = go ds (0, "Init",[]) (C 0)
                   ((_, _), lastBlock) = runWriter (runStateT (closeBlock (Return v)) s)
-              in CanonProg (prog ++ [Left ("pcfmain", [], blocks ++ lastBlock)])-- ver el orden en que se guardan las cosas, sino se cambia
+              in CanonProg (prog ++ [Left ("pcfmain", [], blocks ++ lastBlock)])
               where go (d : ds) init ret = case d of
                                       IrVal name def -> let ((v, s), blocks) = runWriter (runStateT (blocksConvert def) init)
-                                                            ((_, s'), lastBlock) = runWriter (runStateT (addInst (Store name (V v))) s) -- VER TERMINADOR
+                                                            ((_, s'), lastBlock) = runWriter (runStateT (addInst (Store name (V v))) s)
                                                             (blockslist, prog, s'', v')  = go ds s' v
                                                         in (blocks ++ lastBlock ++ blockslist, Right name : prog, s'', v')
-
                                       IrFun name args body -> let ((v, s), blocks) = runWriter (runStateT (blocksConvert body) (0, "Init", []))
-                                                                  ((_, (n,_,_)), lastBlock) = runWriter (runStateT (closeBlock (Return v)) s) -- VER TERMINADOR
-                                                                  (blockslist,  prog, s'', v')  = go ds init ret --(n,"Init",[])
+                                                                  ((_, (n,_,_)), lastBlock) = runWriter (runStateT (closeBlock (Return v)) s)
+                                                                  (blockslist,  prog, s'', v')  = go ds init ret
                                                               in (blockslist, Left (name, args, blocks ++ lastBlock) : prog, s'', v')
                     go [] s ret = ([], [], s, ret)
 
-
-pcfmainBlockBuild :: [Inst] -> StateT (Int, Loc, [Inst]) (Writer Blocks) ()
-pcfmainBlockBuild stores = do l <- freshLoc "pcfmain"
-                              tell [(l,
-                                    stores,
-                                    Return (C 0))] --Ver que devolvemos
 
 freshRegister :: Monad m => StateT (Int, Loc, [Inst]) m Reg
 freshRegister = do (n, _, _) <- get

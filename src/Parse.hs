@@ -60,7 +60,7 @@ num :: P Int
 num = fromInteger <$> natural
 
 var :: P Name
-var = Tok.lexeme lexer $ do -- antes era identifier
+var = Tok.lexeme lexer $ do 
   (c:cs) <- identifier
   if isLower c then return (c:cs) else parserZero
 
@@ -128,7 +128,7 @@ binding = parens $ do vars <- many1 var
                       ty <- typeP
                       return (vars, ty)
 
-bindingFix :: P (Name, Ty) --binding que solo acepta una variable (solo para fix)
+bindingFix :: P (Name, Ty)
 bindingFix = parens $ do v <- var
                          reservedOp ":"
                          ty <- typeP
@@ -228,7 +228,7 @@ decl = do
       t <- tm
       return (Decl i v ty t)) 
       <|> (do
-            f <- var --usar otra funcion para parsear nombre de funcion sino
+            f <- var 
             b <- binders
             reservedOp ":"
             ty <- typeP
@@ -237,7 +237,7 @@ decl = do
             return (DeclLetf i f b ty t))
       <|> (do 
             reserved "rec"
-            f <- var --usar otra funcion para parsear nombre de funcion sino
+            f <- var
             b <- binders
             reservedOp ":"
             ty <- typeP
