@@ -173,10 +173,10 @@ typeCheckFile :: MonadPCF m => FilePath -> m ()
 typeCheckFile f = do
   decls <- parseFile f
   handle decls
-  where handle ((DeclType p n ty): ds) = do addTy n ty
+  where handle ((DeclType p n ty): ds) = do addTy n ty -- (M, Nat)
                                             handle ds
         handle (dn : ds) = do dn' <- desugarDecl dn
-                              let d = elab_decl dn'
+                              let d = elab_decl dn' -- Decl term
                               tcDecl d
                               addDecl d
                               handle ds

@@ -76,9 +76,7 @@ typeError :: MonadPCF m => Term   -- ^ término que se está chequeando
                         -> String -- ^ mensaje de error
                         -> m a
 typeError t s = failPosPCF (getInfo t) $ "Error de tipo en "++pp t++"\n"++s
- 
--- | 'expect' chequea que el tipo esperado sea igual al que se obtuvo
--- y lanza un error si no lo es.
+
 expect :: MonadPCF m => Ty    -- ^ tipo esperado
                      -> Ty    -- ^ tipo que se obtuvo
                      -> Term  -- ^ término que se está chequeando
@@ -86,7 +84,7 @@ expect :: MonadPCF m => Ty    -- ^ tipo esperado
 expect ty ty' t = if ty == ty' then return ty 
                                else typeError t $ 
               "Tipo esperado: "++ ppTy ty
-            ++"\npero se obtuvo: "++ ppTy ty'
+            ++"\npero se obtuvo: "++ ppTy ty'                
 
 -- | 'domCod chequea que un tipo sea función
 -- | devuelve un par con el tipo del dominio y el codominio de la función
@@ -97,12 +95,13 @@ domCod t ty = typeError t $ "Se esperaba un tipo función, pero se obtuvo: " ++ 
 -- | 'tcDecl' chequea el tipo de una declaración
 -- y la agrega al entorno de tipado de declaraciones globales
 tcDecl :: MonadPCF m  => Decl Term -> m ()
-tcDecl (Decl p n _ t) = do
+tcDecl (Decl p n ty t) = do
     --chequear si el nombre ya está declarado
     mty <- lookupTy n
     case mty of
         Nothing -> do  --no está declarado 
                   s <- get
-                  ty <- tc t (tyEnv s)                
+                  tty <- tc t (tyEnv s)
+                  expect ty tty t
                   addTy n ty
-        Just _  -> failPosPCF p $ n ++" ya está declarado"
+        Just _  -> failPosPCF p $ n ++ " ya está declarado"
