@@ -1,0 +1,11 @@
+type N = Nat
+
+let rec suman (x : N) : N = ifz x then 0 else  (x + (suman (pred x)))
+
+let ret : N = suman 100
+
+type M = N
+type FN = N -> M
+
+let suma : FN = 
+    fun (x : N) -> x + 5
