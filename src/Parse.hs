@@ -8,7 +8,7 @@ Stability   : experimental
 
 -}
 
-module Parse (tm, Parse.parse, decl, runP, P, program, declOrTm) where
+module Parse (tm, Parse.parse, decl, runP, P, program, declOrTm, parseDecl) where
 
 import Prelude hiding ( const )
 import Lang
@@ -271,3 +271,8 @@ parse :: String -> NSTerm
 parse s = case runP tm s "" of
             Right t -> t
             Left e -> error ("no parse: " ++ show s)
+
+parseDecl :: String -> Decl NSTerm
+parseDecl s = case runP decl s "" of
+                Right t -> t
+                Left e -> error ("no parse: " ++ show s)
