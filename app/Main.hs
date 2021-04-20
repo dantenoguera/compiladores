@@ -173,10 +173,13 @@ typeCheckFile :: MonadPCF m => FilePath -> m ()
 typeCheckFile f = do
   decls <- parseFile f
   handle decls
-  where handle ((DeclType p n ty): ds) = do addTy n ty -- (M, Nat)
+  where handle ((DeclType p n ty): ds) = do addTy n ty
                                             handle ds
-        handle (dn : ds) = do dn' <- desugarDecl dn
-                              let d = elab_decl dn' -- Decl term
+        handle (dn : ds) = do --printPCF (show dn)
+                              --printPCF "\n"
+                              dn' <- desugarDecl dn
+                              --printPCF (show dn')
+                              let d = elab_decl dn'
                               tcDecl d
                               addDecl d
                               handle ds
@@ -398,9 +401,9 @@ runCEK t = do val <- seek t [] []
 ----------
 -- DESUGAR
 ----------
-typeVariableExpand :: ([Name],Ty) -> Ty -> Ty
-typeVariableExpand (n:ns,xty) tx = typeVariableExpand (ns,xty) (FunTy xty tx)
-typeVariableExpand ([],xty) tx   = tx
+typeVariableExpand :: ([Name], Ty) -> Ty -> Ty
+typeVariableExpand (n : ns, xty) tx = typeVariableExpand (ns,xty) (FunTy xty tx)
+typeVariableExpand ([], xty) tx = tx
 
 desugarDecl :: MonadPCF m => Decl NSTerm -> m (Decl NTerm)
 desugarDecl (Decl p n ty t) =  do ty' <- desugarTy ty
@@ -409,12 +412,17 @@ desugarDecl (Decl p n ty t) =  do ty' <- desugarTy ty
 desugarDecl (DeclLetf p n args ty t) = do ty' <- desugarTy (foldr typeVariableExpand ty args)
                                           t' <- desugarTerm (SLam p args t)
                                           return (Decl p n ty' t')
-desugarDecl (DeclLetRec p n [([x],xty)] ty t) = do ty' <- desugarTy ty 
-                                                   t' <- desugarTerm (SFix p n (FunTy xty ty) x xty t) 
-                                                   return (Decl p n ty' t')
-desugarDecl (DeclLetRec p n ((x1:rest, t1):xs) ty t) = case rest of
-                                                            [] -> do desugarDecl (DeclLetRec p n [([x1], t1)] (foldr typeVariableExpand ty xs) (SLam p xs t))
-                                                            s -> do desugarDecl (DeclLetRec p n [([x1], t1)] (foldr typeVariableExpand ty ((s, t1):xs)) (SLam p ((s, t1):xs) t))
+desugarDecl (DeclLetRec p n [([x],xty)] ty t) = do ty' <- desugarTy ty
+                                                   xty' <- desugarTy xty
+                                                   t' <- desugarTerm (SFix p n (FunTy xty' ty') x xty' t) 
+                                                   return (Decl p n (FunTy xty' ty') t')
+desugarDecl (DeclLetRec p n ((x1 : rest, t1) : xs) ty t) = case rest of
+                                                            [] -> do desugarDecl (DeclLetRec p n [([x1], t1)] 
+                                                                      (foldr typeVariableExpand ty xs) 
+                                                                      (SLam p xs t))
+                                                            s -> do desugarDecl (DeclLetRec p n [([x1], t1)] 
+                                                                      (foldr typeVariableExpand ty ((s, t1) : xs))
+                                                                      (SLam p ((s, t1) : xs) t))
 desugarDecl (Eval t) = do t' <- desugarTerm t
                           return (Eval t')
 
@@ -452,7 +460,7 @@ desugarTerm (SLam p xs t) = do t' <- desugarTerm t
 desugarTerm (SUnaryOpFree p op) = return (Lam p "x" NatTy (UnaryOp p op (V p "x")))
 desugarTerm (SLetRec p f [([x],xty)] ty t1 t2) = desugarTerm (SLet p f (FunTy xty ty) (SFix p f (FunTy xty ty) x xty t1) t2)
 desugarTerm (SLetRec p f ((x1:rest, ty1):xs) ty t1 t2) | null rest = desugarTerm (SLetRec p f [([x1], ty1)] (foldr typeVariableExpand ty xs) (SLam p xs t1) t2)
-                                                         | otherwise = desugarTerm (SLetRec  p f [([x1], ty1)] (foldr typeVariableExpand ty ((rest, ty1):xs)) (SLam p ((rest, ty1):xs) t1) t2)
+                                                       | otherwise = desugarTerm (SLetRec  p f [([x1], ty1)] (foldr typeVariableExpand ty ((rest, ty1):xs)) (SLam p ((rest, ty1):xs) t1) t2)
 
 desugarTy :: MonadPCF m => Ty -> m Ty
 desugarTy (NameTy n) = do t <- lookupTy n
@@ -462,4 +470,4 @@ desugarTy (NameTy n) = do t <- lookupTy n
 desugarTy NatTy = return NatTy
 desugarTy (FunTy t1 t2) = do t1' <- desugarTy t1
                              t2' <- desugarTy t2
-                             return (FunTy t1 t2)
+                             return (FunTy t1' t2')
