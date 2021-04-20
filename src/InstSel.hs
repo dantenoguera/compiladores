@@ -62,7 +62,7 @@ defnMkclosure = GlobalDefinition $ functionDefaults {
 defnPrint :: Definition
 defnPrint = GlobalDefinition $ functionDefaults {
     name = mkName "pcf_print"
-k  , parameters = ([Parameter integer (mkName "x") []], False)
+  , parameters = ([Parameter integer (mkName "x") []], False)
   , linkage = L.External
   , returnType = integer
   }
