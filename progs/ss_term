@@ -1,7 +1,7 @@
-let x : Nat = 1 in succ x
+let p : Nat = let x : Nat = 1 in succ x
 
-let f (x : Nat) : Nat = succ x in f 2
+let p2 : Nat = let f (x : Nat) : Nat = succ x in f 2
 
-let suc2 (x y: Nat) (z:Nat) : Nat = succ (succ x) in suc2 1 0 0
+let p3 : Nat = let suc2 (x y: Nat) (z:Nat) : Nat = succ (succ x) in suc2 1 0 0
 
-let rec suma (x y: Nat) : Nat = ifz x then y else succ (suma (pred x) y) in suma 1 2
+let p4 : Nat = let rec suma (x y: Nat) : Nat = ifz x then y else succ (suma (pred x) y) in suma 1 2

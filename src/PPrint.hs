@@ -5,7 +5,6 @@ Copyright   : (c) Mauro Jaskelioff, Guido Martínez, 2020.
 License     : GPL-3
 Maintainer  : mauro@fceia.unr.edu.ar
 Stability   : experimental
-
 -}
 
 module PPrint (
@@ -66,7 +65,8 @@ ppName = id
 ty2doc :: Ty -> Doc
 ty2doc NatTy     = text "Nat"
 ty2doc (FunTy x@(FunTy _ _) y) = sep [parens (ty2doc x),text "->",ty2doc y]
-ty2doc (FunTy x y) = sep [ty2doc x,text "->",ty2doc y] 
+ty2doc (FunTy x y) = sep [ty2doc x,text "->",ty2doc y]
+ty2doc (NameTy n) = text n
 
 -- | Pretty printer para tipos (String)
 ppTy :: Ty -> String

@@ -37,6 +37,7 @@ import Bytecompile
 import Hoist ( runCC )
 import CIR ( runCanon )
 import InstSel ( codegen )
+import Common ( Pos )
 
 import Data.Text.Lazy.IO as TIO ( writeFile )
 --import LLVM.AST -- necesario para pretty printing?
@@ -175,10 +176,10 @@ typeCheckFile f = do
   handle decls
   where handle ((DeclType p n ty): ds) = do addTy n ty
                                             handle ds
-        handle (dn : ds) = do --printPCF (show dn)
-                              --printPCF "\n"
+        handle (dn : ds) = do -- printPCF (show dn)
+                              -- printPCF "\n"
                               dn' <- desugarDecl dn
-                              --printPCF (show dn')
+                              -- printPCF (show dn')
                               let d = elab_decl dn'
                               tcDecl d
                               addDecl d
@@ -414,17 +415,24 @@ desugarDecl (DeclLetf p n args ty t) = do ty' <- desugarTy (foldr typeVariableEx
                                           return (Decl p n ty' t')
 desugarDecl (DeclLetRec p n [([x],xty)] ty t) = do ty' <- desugarTy ty
                                                    xty' <- desugarTy xty
-                                                   t' <- desugarTerm (SFix p n (FunTy xty' ty') x xty' t) 
+                                                   t' <- desugarTerm (SFix p n (FunTy xty' ty') x xty' t)
                                                    return (Decl p n (FunTy xty' ty') t')
 desugarDecl (DeclLetRec p n ((x1 : rest, t1) : xs) ty t) = case rest of
-                                                            [] -> do desugarDecl (DeclLetRec p n [([x1], t1)] 
-                                                                      (foldr typeVariableExpand ty xs) 
+                                                            [] -> do desugarDecl (DeclLetRec p n [([x1], t1)]
+                                                                      (foldr typeVariableExpand ty xs)
                                                                       (SLam p xs t))
-                                                            s -> do desugarDecl (DeclLetRec p n [([x1], t1)] 
+                                                            s -> do desugarDecl (DeclLetRec p n [([x1], t1)]
                                                                       (foldr typeVariableExpand ty ((s, t1) : xs))
                                                                       (SLam p ((s, t1) : xs) t))
 desugarDecl (Eval t) = do t' <- desugarTerm t
                           return (Eval t')
+
+anidateLams :: MonadPCF m => Pos -> [([Name], Ty)] -> NTerm -> m NTerm
+anidateLams p ((n:ns,nty):xs) t = do nty' <- desugarTy nty
+                                     rest <- anidateLams p ((ns, nty):xs) t
+                                     return $ Lam p n nty' rest
+anidateLams p (([],nty):xs) t = anidateLams p xs t
+anidateLams p [] t = return t
 
 desugarTerm :: MonadPCF m => NSTerm -> m NTerm
 desugarTerm (SV p v) = return (V p v)
@@ -451,12 +459,8 @@ desugarTerm (SLet p n ty t1 t2) = do ty' <- desugarTy ty
                                      return (Let p n ty' t1' t2')
 desugarTerm (SLetf p f xs ty t1 t2) = desugarTerm (SLet p f (foldr typeVariableExpand ty xs) (SLam p xs t1) t2)
 desugarTerm (SLam p xs t) = do t' <- desugarTerm t
-                               let (Lam p' n' nty t'') = f p xs t'
-                               nty' <- desugarTy nty
-                               return (Lam p' n' nty' t'')
-                               where f p ((n:ns,nty):xs) t = Lam p n nty (f p ((ns, nty):xs) t)
-                                     f p (([],nty):xs) t = f p xs t
-                                     f p [] t = t
+                               anidateLams p xs t'
+
 desugarTerm (SUnaryOpFree p op) = return (Lam p "x" NatTy (UnaryOp p op (V p "x")))
 desugarTerm (SLetRec p f [([x],xty)] ty t1 t2) = desugarTerm (SLet p f (FunTy xty ty) (SFix p f (FunTy xty ty) x xty t1) t2)
 desugarTerm (SLetRec p f ((x1:rest, ty1):xs) ty t1 t2) | null rest = desugarTerm (SLetRec p f [([x1], ty1)] (foldr typeVariableExpand ty xs) (SLam p xs t1) t2)

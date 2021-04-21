@@ -1,3 +1,4 @@
-(fun (f : Nat -> Nat) -> f) succ
+let a : Nat -> Nat = (fun (f : Nat -> Nat) -> f) succ
 
-(fun (f : Nat -> Nat) (y : Nat) -> f y) pred (succ x)
+let x : Nat = 0
+let b : Nat = (fun (f : Nat -> Nat) (y : Nat) -> f y) pred (succ x)

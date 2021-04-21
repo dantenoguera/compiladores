@@ -1,2 +1,0 @@
-let a : Nat = 5
-let ret : Nat = a

@@ -1,0 +1,76 @@
+# Archivo con funciones varias (algunas de las primeras prácticas) para ir probando
+
+# definicion de tipo
+type N = Nat
+
+# definiciones de funciones
+
+let sumard(x y:N)(f :N -> N):N = f (x + y) 
+
+let rec suman(x:N):N = ifz x then 0 else  (x + (suman (pred x))) 
+
+let doble(x:N):N =  x + x 
+
+let rec fib(x:N):N = ifz x then 1 else (ifz pred x then 1 else  (fib (pred x)) + (fib (pred (pred x))))  
+
+let rec resta(x y : N):Nat = ifz y then x else ifz x then 0 else resta (pred x) (pred y)
+
+let rec mult(x y : N):Nat =ifz y then 0 else x + (mult x (pred y))
+
+let rec exp(x y : N):Nat = ifz y then 1 else mult x (exp x (pred y))
+
+let rec fact (x:N):Nat =  ifz x then 1 else mult x (fact (pred x))
+
+let rec gcd(n m : N):Nat =  ifz n then m else 
+                            ifz m then n else 
+                            ifz (n - m) then gcd (m - n) n else gcd m (n - m)
+
+let rec gcd2(n m : N):Nat =  ifz n then m else 
+                             ifz m then n else 
+                             ifz (resta n m) then gcd2 (resta m n) n else gcd2 m (resta n m)
+
+
+# funciones recursivas de cola
+
+let rec multC2( a b ac :N):Nat = ifz b then ac else multC2 a (pred b) (ac + a)  
+
+let multC(a b : N):Nat  = multC2 a b 0
+
+let rec expC2(a b ac : N):Nat = ifz b then ac else (expC2 a (pred b) (multC a ac))
+
+let expC(a b : N):Nat = expC2 a b 1
+
+
+# Prueba de eficiencia de llamada de cola:
+# 8.000.000.000 bytes
+#let znc:N = (exp 1 1000000) + (gcd 9883 9887)  
+# 264.000.000 bytes
+#let zc:N = (expC 1 1000000) + (gcd 9883 9887)  
+
+
+# pruebas que fuimos haciendo
+
+let x : Nat = 3
+let y : Nat = x + 4
+
+let z : Nat = doble y
+
+
+let res1:Nat = suman 10
+let res2:Nat = doble 10
+let res3:Nat = sumard 5 7 doble
+let res4:Nat = fib 20
+let res5:Nat = resta 34 12 
+let res6:Nat = mult 2 5
+let res7:Nat = exp 2 3
+let res8:Nat = fact 5
+
+#let x2:Nat = gcd 12 144
+#let x3:Nat = mult (gcd 18 81) 2
+#let a:Nat = (expC 2 4)
+
+let x4:Nat = let x2:Nat = 343 in (x2 + res2) + res1
+
+let res:Nat = (doble (mult 3 2)) + (doble (mult 3 2)) 
+
+let res55:Nat = ((doble (mult 3 2)) + (doble (mult 3 2))) + ((exp 1 10000) + (gcd 9883 9887))
