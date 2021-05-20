@@ -6,7 +6,6 @@ import Subst ( open, openN )
 import Data.List
 
 data IrDecl = IrVal {irDeclName :: Name, irDeclDef :: Ir}
-
             | IrFun {irDeclName :: Name, irDeclArgNames :: [Name], irDeclBody :: Ir}
             deriving Show
 
@@ -33,9 +32,10 @@ mkIr t clo vs = go t clo vs 1
               go t _ [] _ = t
 
 mkIrFix :: Ir -> Name -> [Name] -> Ir
-mkIrFix t clo vs = go t clo vs 1
-        where go t clo (r : vs) i = IrLet r (IrVar clo) (go t clo vs (i + 1))
-              go t _ [] _ = t
+mkIrFix t clo (r : vs) = IrLet r (IrVar clo) (mkIr t clo vs)
+--go t clo vs 1
+        --where go t clo (r : vs) i = IrLet r (IrVar clo) (go t clo vs (i + 1))
+        --      go t _ [] _ = t
 
 closureConvert :: Term -> StateT Int (Writer [IrDecl]) Ir
 closureConvert (V _ (Free n)) = return (IrVar n)

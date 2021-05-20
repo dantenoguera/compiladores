@@ -121,7 +121,6 @@ go (LLVMcompile, files) = do runPCF $ catchErrors $ llvmCompileFiles files
 llvmCompileFiles :: MonadPCF m => [FilePath] -> m()
 llvmCompileFiles = mapM_ llvmCompileFile
 
-
 llvmCompileFile :: MonadPCF m => FilePath -> m()
 llvmCompileFile f =  do decls <- parseFile f
                         decls' <- handle decls

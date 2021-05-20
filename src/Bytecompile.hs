@@ -27,11 +27,11 @@ type Opcode = Int
 type Bytecode = [Int]
 type Module = [Decl Term]
 
-newtype Bytecode32 = BC { un32 :: [Word32] }
+newtype Bytecode32 = BC { un32 :: [Word32] } -- Word32 = UINT32
 
 {- Esta instancia explica como codificar y decodificar Bytecode de 32 bits -}
 instance Binary Bytecode32 where
-  put (BC bs) = mapM_ putWord32le bs
+  put (BC bs) = mapM_ putWord32le bs 
   get = go
     where go =
            do
@@ -53,6 +53,7 @@ entero, por ejemplo:
  En lo posible, usar estos códigos exactos para poder ejectutar un
  mismo bytecode compilado en distintas implementaciones de la máquina.
 -}
+
 pattern RETURN   = 1
 pattern CONST    = 2
 pattern ACCESS   = 3
